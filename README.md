@@ -115,19 +115,13 @@ GDT’de ring-0 ve ring-3 code/data selector’ları ayrıdır. TSS, kernel stac
 
 VMM yeni kullanıcı address-space’lerinde yalnızca kernel’in upper-half PML4 dallarını miras alır. Kullanıcı low-half mapping’leri özel page-table dallarında oluşturulur; mevcut supervisor intermediate entries sonradan `VM_USER` yapılmaz. Bu düzen page-table izinlerinin kullanıcı tarafından yukarı doğru genişletilmesini önler.
 
-## Güvenlik kapsamı ve sınırlar
+## Geliştirilme notları
 
-NPKernel’de ring ayrımı, user-range/canonical-address kontrolleri, W^X, NX, copyin/copyout, ayrı kernel stack’leri, TSS/IST, VMA sınırları ve ELF rollback mekanizmaları vardır. `arch_prctl` artık per-thread `ARCH_SET_FS`/`ARCH_GET_FS` TLS temelini ve kullanıcı GS base saklamasını destekler; bu, CRT/libc başlangıcındaki temel TLS kurulum engelini kaldırır. `sched_yield`, `readv`/`writev`, `mprotect`, pipe/fd paylaşımı ve fault kaynaklı signal delivery dispatcher’a bağlıdır. `rt_sigaction` + handler frame + `rt_sigreturn` ile `rt_sigprocmask`, `kill` ve `tgkill` temel yolları tamamlanmıştır. Bounded `futex` (`FUTEX_WAIT`/`FUTEX_WAKE`, timeout, signal interruption ve `clear_child_tid`) ile sınırlı `clone` thread yolu da kernel’de vardır. Bu subset tam pthread/Rust thread-runtime uyumluluğu, priority-inheritance/requeue/robust-list futexleri veya eksiksiz thread-group semantiği iddiası taşımaz. Kernel dynamic ELF için `PT_INTERP` interpreter handoff sağlar; `DT_NEEDED`/sembol çözümleme ve relocation userspace `ld.so` sorumluluğundadır. Bounded `poll`/`epoll`, persistent NPKFS, realtime signal payload queue ve Limine MP/AP bring-up uygulanmıştır. Tam pthread/Rust thread-runtime, PI/requeue/robust-list futexleri, per-CPU SMP scheduler/migration, journaling filesystem, `select`, edge-triggered epoll, USB HID, network/audio drivers ve tam POSIX pathname/permission/mount yüzeyi bu release’in kapsamı değildir. Initramfs directory hierarchy ve canonical path normalization bounded prototype kapsamındadır; genel-purpose persistent directory filesystem değildir.
- Unsupported syscall’lar sessizce başarılı sayılmaz ve `-ENOSYS` döndürür.
-
-## Doğrulama
-
-Güncel doğrulama kaydı [`docs/verification.md`](docs/verification.md) içindedir. Temiz build, BIOS ve UEFI boot, ring-3 `exit`, fork/COW + wait4, kullanıcı #PF/#GP termination, SIGILL handler delivery, signal/VM/fd ABI, clone/futex, poll/epoll, file-backed mmap, shared-memory IPC, display/input handoff, initramfs directory hierarchy, PCI/PS2 mouse initialization, persistent storage, SMP `-smp 2` ve 38-vaka ELF adversarial corpus smoke testleri bu sürümde kaydedilmiştir. Gerçek musl/glibc runtime, sigwait/nested signal frames, robust/PI futexleri ve per-CPU scheduler ayrı kapsam kapılarıdır.
- Üretim kaynak ağacında geçici user-demo payload’ları ve tanı logları bırakılmamıştır.
+Bu proje tamamen AI desteği ile geliştirilmiş ve insan elinin sadece planlamasını yaptığı bir işletim sistemi çekirdeğidir. Proje [Manus.AI](https://manus.im) adlı agent tarafından düzenli olarak geliştirilmektedir.
 
 ## Lisans
 
-NPKernel, [MIT License](LICENSE) altında yayımlanır.
+NPKernel, [MIT License](LICENSE) altında yayımlanır. 7YokKi tarafından yürütülmekte ve No PRoblem adına paylaşılmaktadır.
 
 ## Referanslar
 
