@@ -1,0 +1,18 @@
+NPKernel PCI + PS/2 pointer foundation smoke
+Date: 2026-08-22
+
+Build:
+  make -j2 all
+  result: success
+
+Run:
+  timeout 12s qemu-system-x86_64 -M q35 -m 512M -cdrom build/npkernel.iso -serial file:/tmp/npk-phase5-pci-mouse-qemu.log -display none -no-reboot -no-shutdown
+  expected timeout status: 124 (kernel idles)
+
+Observed:
+  [INFO] mouse: PS/2 three-byte pointer events enabled
+  [INFO] pci: enumerated devices
+  [INFO] keyboard: PS/2 set-1; Turkish Q layout enabled
+  no PANIC, #GP, page_fault, fatal, or reboot marker
+
+The kernel now has bounded legacy PCI config-space enumeration and a PS/2 mouse IRQ12 backend. Mouse motion and button changes enter the same structured input queue as keyboard events; USB HID, hotplug, multi-device routing, and a complete device namespace remain future work.

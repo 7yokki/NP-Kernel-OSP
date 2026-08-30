@@ -1,0 +1,24 @@
+NPKernel display/input ABI smoke
+Date: 2026-08-22
+
+Temporary payload: user/mmap.asm (restored after this run)
+Temporary kernel demo: NPK_ENABLE_USER_DEMO=1, /bin/mmap.elf (restored after this run)
+
+Build:
+  make -j2 all
+  result: success
+
+Run:
+  timeout 14s qemu-system-x86_64 -M q35 -m 512M -cdrom build/npkernel.iso -serial file:/tmp/npk-phase4-display-smoke-qemu.log -display none -no-reboot -no-shutdown
+  expected timeout status: 124 (kernel idles after user exit)
+
+Observed syscall sequence:
+  NPK_SYS_NPK_DISPLAY_INFO (0x403)
+  NPK_SYS_NPK_DISPLAY_CLAIM (0x404)
+  NPK_SYS_NPK_INPUT_READ (0x407), empty queue accepted without error
+  NPK_SYS_NPK_DISPLAY_MAP (0x405), controlled kernel-selected framebuffer mapping
+  framebuffer mapping was touched by the user payload
+  NPK_SYS_NPK_DISPLAY_RELEASE (0x406), device VMA revoke path
+  exit(60), process exit status = 0
+
+No unhandled page fault, #GP, PANIC, or fatal marker was observed. The payload is a temporary smoke test only; no userspace display program or GUI is shipped.

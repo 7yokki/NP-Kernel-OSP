@@ -1,0 +1,22 @@
+NPKernel bounded shared-memory IPC smoke
+Date: 2026-08-22
+
+Temporary payload: user/mmap.asm (restored after this run)
+Temporary kernel demo: NPK_ENABLE_USER_DEMO=1, /bin/mmap.elf (restored after this run)
+
+Build:
+  make -j2 all
+  result: success
+
+Run:
+  timeout 14s qemu-system-x86_64 -M q35 -m 512M -cdrom build/npkernel.iso -serial file:/tmp/npk-phase3-shm-smoke-qemu.log -display none -no-reboot -no-shutdown
+  expected timeout status: 124 (kernel idles after all user threads exit)
+
+Observed serial evidence:
+  NPK_SYS_NPK_SHM_CREATE (0x400), mmap(9), fork(57), close(3), NPK_SYS_NPK_FD_SEND (0x401), NPK_SYS_NPK_FD_RECV (0x402), wait4(61), mmap(9), close(3), exit(60)
+  lazy page faults for the parent shared mapping and child mapping were handled
+  child exit status = 0
+  parent exit status = 0
+  no unhandled page fault, #GP, PANIC, or fatal marker
+
+The temporary payload wrote byte 0x5a through the parent mapping, transferred the same shared-object descriptor to the child, mapped it in the child, and verified the byte through the child mapping. The kernel does not ship this payload as a service or application; it is only a smoke test.

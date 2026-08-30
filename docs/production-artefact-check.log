@@ -1,0 +1,31 @@
+=== source cleanup ===
+src/kernel.c:21:#ifndef NPK_ENABLE_USER_DEMO
+src/kernel.c:22:#define NPK_ENABLE_USER_DEMO 0
+src/kernel.c:25:#if NPK_ENABLE_USER_DEMO
+src/kernel.c:170:#if NPK_ENABLE_USER_DEMO
+=== hello.asm ===
+BITS 64
+SECTION .text
+GLOBAL _start
+_start:
+    mov eax, 60
+    xor edi, edi
+    syscall
+    hlt
+=== kernel ELF ===
+  Class:                             ELF64
+  Type:                              EXEC (Executable file)
+  Machine:                           Advanced Micro Devices X86-64
+  Entry point address:               0xffffffff80010800
+=== user ELF ===
+  Class:                             ELF64
+  Type:                              EXEC (Executable file)
+  Machine:                           Advanced Micro Devices X86-64
+  Entry point address:               0x400000
+=== ISO boot files ===
+=== symbols ===
+ffffffff80000960 T vm_resize_heap
+ffffffff80007270 T process_futex_wait
+ffffffff800085b0 T process_exec_current
+ffffffff80008f50 T process_clone
+ffffffff800095e0 T process_wait4

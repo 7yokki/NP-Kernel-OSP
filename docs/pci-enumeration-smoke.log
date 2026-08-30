@@ -1,0 +1,16 @@
+NPKernel PCI enumeration smoke
+Date: 2026-08-22
+
+Build:
+  make -j2 all
+  result: success
+
+Run:
+  timeout 12s qemu-system-x86_64 -M q35 -m 512M -cdrom build/npkernel.iso -serial file:/tmp/npk-phase5-pci-qemu.log -display none -no-reboot -no-shutdown
+  expected timeout status: 124 (kernel idles)
+
+Observed:
+  [INFO] pci: enumerated devices
+  q35 boot completed without PANIC, #GP, unhandled page fault, or fatal marker.
+
+The driver currently performs bounded PCI configuration mechanism #1 enumeration and records vendor/device/class/header/IRQ/BAR metadata. It does not enable bus mastering, program BARs, attach a device driver, or expose arbitrary configuration writes to userspace.

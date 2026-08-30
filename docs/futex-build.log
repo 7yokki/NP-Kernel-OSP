@@ -1,0 +1,51 @@
+clang --target=x86_64-unknown-none-elf -std=c17 -O2 -g3 -ffreestanding -fno-stack-protector -fno-stack-check -fno-pie -fno-plt -mno-red-zone -mcmodel=kernel -mno-sse -mno-sse2 -mno-mmx -mno-80387 -Wall -Wextra -Werror -Iinclude -MMD -MP -c src/memory/vm.c -o build/src/memory/vm.o
+clang --target=x86_64-unknown-none-elf -std=c17 -O2 -g3 -ffreestanding -fno-stack-protector -fno-stack-check -fno-pie -fno-plt -mno-red-zone -mcmodel=kernel -mno-sse -mno-sse2 -mno-mmx -mno-80387 -Wall -Wextra -Werror -Iinclude -MMD -MP -c src/memory/vmm.c -o build/src/memory/vmm.o
+clang --target=x86_64-unknown-none-elf -std=c17 -O2 -g3 -ffreestanding -fno-stack-protector -fno-stack-check -fno-pie -fno-plt -mno-red-zone -mcmodel=kernel -mno-sse -mno-sse2 -mno-mmx -mno-80387 -Wall -Wextra -Werror -Iinclude -MMD -MP -c src/arch/irq.c -o build/src/arch/irq.o
+clang --target=x86_64-unknown-none-elf -std=c17 -O2 -g3 -ffreestanding -fno-stack-protector -fno-stack-check -fno-pie -fno-plt -mno-red-zone -mcmodel=kernel -mno-sse -mno-sse2 -mno-mmx -mno-80387 -Wall -Wextra -Werror -Iinclude -MMD -MP -c src/arch/idt.c -o build/src/arch/idt.o
+clang --target=x86_64-unknown-none-elf -std=c17 -O2 -g3 -ffreestanding -fno-stack-protector -fno-stack-check -fno-pie -fno-plt -mno-red-zone -mcmodel=kernel -mno-sse -mno-sse2 -mno-mmx -mno-80387 -Wall -Wextra -Werror -Iinclude -MMD -MP -c src/syscall/syscall.c -o build/src/syscall/syscall.o
+clang --target=x86_64-unknown-none-elf -std=c17 -O2 -g3 -ffreestanding -fno-stack-protector -fno-stack-check -fno-pie -fno-plt -mno-red-zone -mcmodel=kernel -mno-sse -mno-sse2 -mno-mmx -mno-80387 -Wall -Wextra -Werror -Iinclude -MMD -MP -c src/proc/process.c -o build/src/proc/process.o
+clang --target=x86_64-unknown-none-elf -std=c17 -O2 -g3 -ffreestanding -fno-stack-protector -fno-stack-check -fno-pie -fno-plt -mno-red-zone -mcmodel=kernel -mno-sse -mno-sse2 -mno-mmx -mno-80387 -Wall -Wextra -Werror -Iinclude -MMD -MP -c src/fs/procfs.c -o build/src/fs/procfs.o
+make: Nothing to be done for 'disk'.
+clang --target=x86_64-unknown-none-elf -std=c17 -O2 -g3 -ffreestanding -fno-stack-protector -fno-stack-check -fno-pie -fno-plt -mno-red-zone -mcmodel=kernel -mno-sse -mno-sse2 -mno-mmx -mno-80387 -Wall -Wextra -Werror -Iinclude -MMD -MP -c src/kernel.c -o build/src/kernel.o
+ld.lld -m elf_x86_64 -nostdlib -z max-page-size=0x1000 --gc-sections -T linker.ld build/boot/limine_requests.o build/src/memory/pmm.o build/src/memory/vm.o build/src/memory/vmm.o build/src/memory/heap.o build/src/arch/irq.o build/src/arch/timer.o build/src/arch/gdt.o build/src/arch/idt.o build/src/syscall/syscall.o build/src/proc/process.o build/src/exec/elf.o build/src/fs/procfs.o build/src/fs/vfs.o build/src/drivers/font.o build/src/drivers/gop.o build/src/drivers/vga.o build/src/drivers/keyboard.o build/src/drivers/ata.o build/src/kernel.o build/src/string.o build/src/console.o build/src/log.o build/src/panic.o build/src/acpi.o build/arch/x86_64/entry.o -o build/npkernel.elf
+objcopy --only-keep-debug build/npkernel.elf build/npkernel.debug
+cp build/npkernel.elf build/iso_root/boot/npkernel.elf
+cp build/initramfs.cpio build/iso_root/boot/initramfs.cpio
+cp build/limine.conf build/iso_root/boot/limine/limine.conf
+cp build/limine/limine-bios.sys build/iso_root/boot/limine/
+cp build/limine/limine-bios-cd.bin build/iso_root/boot/limine/
+cp build/limine/limine-uefi-cd.bin build/iso_root/boot/limine/
+cp build/limine/BOOTX64.EFI build/iso_root/EFI/BOOT/
+xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin \
+	-no-emul-boot -boot-load-size 4 -boot-info-table \
+	--efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part \
+	--efi-boot-image --protective-msdos-label build/iso_root -o build/npkernel.iso
+xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project.
+
+Drive current: -outdev 'stdio:build/npkernel.iso'
+Media current: stdio file, overwriteable
+Media status : is blank
+Media summary: 0 sessions, 0 data blocks, 0 data, 30.3g free
+Added to ISO image: directory '/'='/home/ubuntu/npkernel/build/iso_root'
+xorriso : UPDATE :      11 files added in 1 seconds
+xorriso : UPDATE :      11 files added in 1 seconds
+ISO image produced: 2055 sectors
+Written to medium : 2055 sectors at LBA 0
+Writing to 'stdio:build/npkernel.iso' completed successfully.
+
+build/limine/limine bios-install build/npkernel.iso
+Physical block size of 512 bytes.
+Installing to GPT. Logical block size of 512 bytes.
+Secondary header at LBA 0x201b.
+Secondary header valid.
+Detected ISOHYBRID with a GUID partition table (GPT).
+Converting to MBR for improved compatibility...
+Conversion successful.
+No active partition found, some systems may not boot.
+Setting partition 1 as active to work around the issue...
+Installing to MBR.
+Stage 2 to be located at 0x200 and 0x2800.
+Reminder: Remember to copy the limine-bios.sys file in either
+          the root, /boot, /limine, or /boot/limine directories of
+          one of the partitions on the device, or boot will fail!
+Limine BIOS stages installed successfully!

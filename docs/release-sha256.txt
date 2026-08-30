@@ -1,0 +1,4 @@
+c4a64d35bc972c3e32e552336e8b6a5bf631b083772d937f71dbcce71b43655c  build/npkernel.elf
+43dd1c97f93b9256d1c5384e3c5c7f1dddae733c662de0cd2249542a4f6a7e8d  build/npkernel.iso
+83ee47245398adee79bd9c0a8bc57b821e92aba10f5f9ade8a5d1fae4d8c4302  build/npkernel-disk.img
+65fe46347a454798d809b68149e93e9f244608e0feebe70d02a2b73815b4bc9a  build/initramfs.cpio

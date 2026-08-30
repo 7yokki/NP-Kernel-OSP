@@ -1,0 +1,23 @@
+NPKernel initramfs directory/path smoke
+Date: 2026-08-22
+
+Temporary payload: user/mmap.asm (restored after this run)
+Temporary kernel demo: NPK_ENABLE_USER_DEMO=1, /bin/mmap.elf (restored after this run)
+
+Build:
+  make -j2 all
+  result: success
+
+Run:
+  timeout 14s qemu-system-x86_64 -M q35 -m 512M -cdrom build/npkernel.iso -serial file:/tmp/npk-phase5-vfs-tree-smoke-qemu-2.log -display none -no-reboot -no-shutdown
+  expected timeout status: 124 (kernel idles after user exit)
+
+Observed syscall sequence:
+  open("/bin/./hello.elf") succeeded through canonical path normalization
+  getdents64("/") returned non-empty child directory entries
+  getdents64("/bin") returned non-empty entries
+  open("/bin/../hello.elf") was rejected by the bounded traversal policy
+  close and exit(60) completed
+  process exit status = 0
+
+No unhandled page fault, #GP, PANIC, or fatal marker was observed. This validates the bounded initramfs directory namespace; it is not a claim of a complete POSIX pathname, symlink, mount, permission, or crash-consistent filesystem.

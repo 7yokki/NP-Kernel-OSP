@@ -1,0 +1,90 @@
+[INFO] boot: Limine base revision
+       value=0x6a7b384944536bdc
+[INFO] gop: framebuffer width
+       value=0x0000000000000780
+[INFO] gop: framebuffer height
+       value=0x0000000000000438
+[INFO] boot: HHDM offset
+       value=0xffff800000000000
+[INFO] gdt: descriptors including TSS
+       value=0x0000000000000007
+[INFO] idt: gates installed
+       value=0x0000000000000100
+[INFO] irq: PIC timer vector
+       value=0x0000000000000020
+[INFO] irq: PIC keyboard vector
+       value=0x0000000000000021
+[INFO] timer: PIT frequency
+       value=0x0000000000000064
+[INFO] acpi: using RSDT
+       value=0x0000000000000074
+[INFO] acpi: SCI IOAPIC GSI
+       value=0x0000000000000009
+[INFO] acpi: SCI IOAPIC vector
+       value=0x0000000000000029
+[INFO] acpi: SCI IRQ
+       value=0x0000000000000009
+[INFO] acpi: PM1a control
+       value=0x0000000000000604
+[INFO] acpi: S5 sleep type A
+       value=0x0000000000000000
+[INFO] acpi: S5 sleep type B
+       value=0x0000000000000000
+[INFO] acpi: ACPI PM1 power button, SCI, and S5 ready
+[INFO] irq: ACPI SCI vector
+       value=0x0000000000000029
+[INFO] pmm: free pages
+       value=0x000000000001e8a3
+[INFO] pmm: tracked pages
+       value=0x000000000001f7f0
+[INFO] vmm: active pml4
+       value=0x000000001ff7f000
+[INFO] vmm: user address limit
+       value=0x0000800000000000
+[INFO] heap: initial heap bytes
+       value=0x0000000000001000
+[INFO] keyboard: PS/2 set-1; Turkish Q layout enabled
+[INFO] ata: primary device unavailable
+       value=0x0000000000000013
+[INFO] proc: kernel pid
+       value=0x0000000000000001
+[INFO] proc: kernel tid
+       value=0x0000000000000001
+[INFO] vfs: initramfs files
+       value=0x0000000000000004
+[INFO] syscall: Linux x86_64 ABI table entries
+       value=0x000000000000001f
+[INFO] syscall: safe pointers, metadata, mmap/mprotect/munmap, signals, brk, proc, timer and execve registered
+[INFO] demo: kernel.c is in control; custom boot flow is active
+[INFO] demo: Türkçe klavye: ş ğ ü ö ç İ Ş Ğ Ü Ö Ç
+[INFO] demo: one page allocated
+       value=0x0000000001004000
+[INFO] demo: allocator page returned successfully
+[INFO] heap: kmalloc/kcalloc/kfree integrity check passed
+[INFO] ata: read sector 0 result
+       value=0x00000000ffffffea
+[INFO] vm: temporary address-space root
+       value=0x0000000001004000
+[INFO] vm: anonymous mmap result
+       value=0x0000000000000000
+[INFO] vm: anonymous mmap ownership
+       value=0x0000000000000001
+[INFO] vm: anonymous munmap result
+       value=0x0000000000000000
+[INFO] elf: secure PT_LOAD pages
+       value=0x0000000000000001
+[INFO] elf: entry point
+       value=0x0000000000400000
+[INFO] elf: hello.elf validated, loaded, and rolled back
+       value=0x0000000000000001
+[INFO] proc: meminfo read bytes
+       value=0x0000000000000027
+[INFO] demo: ring0 kernel descriptors and ring3 user descriptors are installed
+[WARN] demo: full Linux userspace compatibility is intentionally staged; unsupported syscalls return -ENOSYS
+[INFO] vfs: initramfs README.txt bytes
+       value=0x000000000000005f
+[INFO] vfs: root getdents64 bytes
+       value=0x00000000000000e0
+[INFO] vfs: root fstat result
+       value=0x0000000000000000
+[INFO] boot: NPKernel initialization complete; interrupts enabled

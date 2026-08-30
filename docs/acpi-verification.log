@@ -1,0 +1,37 @@
+NPKernel ACPI verification evidence
+Date: 2026-08-16
+
+BIOS / SeaBIOS / -M pc:
+[INFO] acpi: using RSDT
+[INFO] acpi: SCI IOAPIC GSI = 0x0000000000000009
+[INFO] acpi: SCI IOAPIC vector = 0x0000000000000029
+[INFO] acpi: ACPI PM1 power button, SCI, and S5 ready
+[INFO] boot: NPKernel initialization complete; interrupts enabled
+
+UEFI / OVMF / -M q35:
+[INFO] acpi: using XSDT
+[INFO] acpi: SCI IOAPIC GSI = 0x0000000000000009
+[INFO] acpi: SCI IOAPIC vector = 0x0000000000000029
+[INFO] acpi: ACPI PM1 power button, SCI, and S5 ready
+[INFO] boot: NPKernel initialization complete; interrupts enabled
+
+UEFI QEMU virtual power-button test:
+QMP request: system_powerdown
+QMP event: POWERDOWN
+[INFO] acpi: power button event; entering S5 soft-off
+Guest stopped after PM1 SLP_TYP/SLP_EN write.
+
+Implementation notes:
+- RSDT and XSDT are supported.
+- FADT PM1a/PM1b fixed-register blocks are supported.
+- DSDT _S5_ extraction is bounded and checksum-validated at table level.
+- MADT IOAPIC routing supports SCI interrupt-source overrides.
+- Legacy PIC IRQ9 and PM1 status polling remain fallback paths.
+
+Final clean-build retry:
+[INFO] acpi: using XSDT
+[INFO] acpi: SCI IOAPIC GSI = 0x0000000000000009
+[INFO] acpi: ACPI PM1 power button, SCI, and S5 ready
+[INFO] boot: NPKernel initialization complete; interrupts enabled
+QMP request: system_powerdown
+[INFO] acpi: power button event; entering S5 soft-off

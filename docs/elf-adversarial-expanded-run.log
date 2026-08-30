@@ -1,0 +1,46 @@
+python3 tools/elf_adversarial.py build/user/hello.elf build/adversarial-elf
+generated 38 ELF cases in build/adversarial-elf
+build/adversarial-elf/manifest.tsv
+clang -std=c17 -O2 -ffunction-sections -fdata-sections -Wno-incompatible-library-redeclaration -Iinclude -c src/exec/elf.c -o build/elf-host.o
+clang -std=c17 -O2 -ffunction-sections -fdata-sections -Iinclude -c tests/elf_validate_host.c -o build/elf_validate_host.o
+clang -Wl,--gc-sections build/elf-host.o build/elf_validate_host.o -o build/elf_validate_host
+build/elf_validate_host build/adversarial-elf/manifest.tsv
+build/adversarial-elf/valid.elf: expected=1 actual=1
+build/adversarial-elf/truncated_header.elf: expected=0 actual=0
+build/adversarial-elf/bad_magic.elf: expected=0 actual=0
+build/adversarial-elf/bad_class.elf: expected=0 actual=0
+build/adversarial-elf/bad_data.elf: expected=0 actual=0
+build/adversarial-elf/bad_machine.elf: expected=0 actual=0
+build/adversarial-elf/phoff_wrap.elf: expected=0 actual=0
+build/adversarial-elf/zero_phnum.elf: expected=0 actual=0
+build/adversarial-elf/short_phentsize.elf: expected=0 actual=0
+build/adversarial-elf/filesz_gt_memsz.elf: expected=0 actual=0
+build/adversarial-elf/file_offset_oob.elf: expected=0 actual=0
+build/adversarial-elf/bad_alignment.elf: expected=0 actual=0
+build/adversarial-elf/writable_executable.elf: expected=0 actual=0
+build/adversarial-elf/non_user_vaddr.elf: expected=0 actual=0
+build/adversarial-elf/entry_nonexec.elf: expected=0 actual=0
+build/adversarial-elf/bad_version.elf: expected=0 actual=0
+build/adversarial-elf/phnum_over_limit.elf: expected=0 actual=0
+build/adversarial-elf/zero_memsz.elf: expected=0 actual=0
+build/adversarial-elf/offset_filesz_wrap.elf: expected=0 actual=0
+build/adversarial-elf/vaddr_offset_misaligned.elf: expected=0 actual=0
+build/adversarial-elf/excessive_memsz.elf: expected=0 actual=0
+build/adversarial-elf/entry_bias_wrap.elf: expected=0 actual=0
+build/adversarial-elf/overlapping_loads.elf: expected=0 actual=0
+build/adversarial-elf/interp_valid.elf: expected=1 actual=1
+build/adversarial-elf/interp_filesz_gt_memsz.elf: expected=0 actual=0
+build/adversarial-elf/interp_duplicate.elf: expected=0 actual=0
+build/adversarial-elf/interp_unterminated.elf: expected=0 actual=0
+build/adversarial-elf/interp_relative.elf: expected=0 actual=0
+build/adversarial-elf/interp_embedded_nul.elf: expected=0 actual=0
+build/adversarial-elf/interp_path_traversal.elf: expected=0 actual=0
+build/adversarial-elf/interp_too_long.elf: expected=0 actual=0
+build/adversarial-elf/dynamic_valid.elf: expected=1 actual=1
+build/adversarial-elf/dynamic_filesz_gt_memsz.elf: expected=0 actual=0
+build/adversarial-elf/dynamic_duplicate.elf: expected=0 actual=0
+build/adversarial-elf/dynamic_unterminated.elf: expected=0 actual=0
+build/adversarial-elf/dynamic_bad_size.elf: expected=0 actual=0
+build/adversarial-elf/dynamic_negative_tag.elf: expected=0 actual=0
+build/adversarial-elf/et_dyn_valid.elf: expected=1 actual=1
+ELF_CORPUS total=38 failed=0

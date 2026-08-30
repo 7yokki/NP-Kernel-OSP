@@ -1,0 +1,28 @@
+NPKernel final release gates — 2026-08-22
+
+[PASS] Toolchain: clang, ld.lld, nasm, xorriso, qemu-system-x86_64
+[PASS] Build: make clean && make -j2 all disk
+[PASS] Portable initramfs build: helper derives project root from __file__; Makefile passes build/initramfs.cpio explicitly
+[PASS] Production guard: NPK_ENABLE_USER_DEMO=0
+[PASS] Production payload: user/hello.asm contains only exit(0) and hlt
+[PASS] Limine artefact chain: PROJECT ?= npkernel; boot():/boot/npkernel.elf; module_path boot():/boot/initramfs.cpio
+[PASS] Kernel ELF: ELF64 EXEC x86_64
+[PASS] Secure ELF loader: ET_EXEC/ET_DYN, overflow/overlap/bounds/W^X/NX/rollback checks
+[PASS] Dynamic ELF handoff: bounded PT_INTERP/PT_DYNAMIC metadata, interpreter mapping, AT_BASE/AT_ENTRY/AT_PHDR/AT_PHNUM/AT_PHENT; userspace ld.so retains relocation responsibility
+[PASS] In-place execve: process_exec_current stages and commits replacement image to the same process/thread identity
+[PASS] brk: vm_resize_heap reserves a VMA_HEAP range and rolls back failed growth without releasing prior heap pages
+[PASS] wait4: parent wake records result and claims child atomically; resumed waiter reaps the claimed zombie
+[PASS] futex: syscall 202 bounded address-space-keyed WAIT/WAKE, timeout, signal interruption, clear_child_tid
+[PASS] Bounded thread-group: syscall 56 constrained clone, TID/TGID, set_tid_address, group exit and signal targeting
+[PASS] Realtime signals: rt_sigqueueinfo/rt_tgsigqueueinfo, bounded siginfo_t/si_value queue, SA_SIGINFO frame, EAGAIN overflow
+[PASS] poll/epoll: poll/ppoll and level-triggered epoll for regular files, pipes and TTY; bounded watch table and close cleanup
+[PASS] Persistent storage: ATA PIO write path, fixed-region NPKFS /persist, open flags, close flush, fsync/fdatasync/sync and readback
+[PASS] SMP bring-up: Limine MP response and QEMU -smp 2 report two CPUs online; APs safely idle pending per-CPU scheduler
+[PASS] ELF adversarial corpus: make test-elf-corpus, 38 cases, failed=0
+[PASS] Signals: rt_sigaction, rt_sigprocmask, kill/tgkill, pending delivery, user frame and rt_sigreturn
+[PASS] VM/FD ABI: lazy mmap, mprotect W^X, pipe, dup/dup2/fcntl and refcounted open handles
+[PASS] BIOS production boot: QEMU -M pc -smp 2 reached initialization complete; no panic/fatal marker
+[PASS] UEFI production boot: QEMU -M q35 -smp 2 reached initialization complete; no panic/fatal marker
+[PASS] Persistent QEMU boot: QEMU -M pc with ATA disk image formatted persistent NPKFS and reached initialization complete
+
+Release scope: bounded dynamic-ELF kernel handoff, bounded userspace thread/readiness/storage/realtime-signal primitives, SMP AP bring-up and reproducible ELF validation. Complete pthread/Rust runtime semantics, in-kernel dynamic relocation, per-CPU SMP scheduling/migration, journaling/crash-recovery filesystem, select, edge-triggered epoll, sigwait/nested signal frames and broad Linux pathname/ioctl compatibility are not claimed.

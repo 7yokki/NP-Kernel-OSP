@@ -1,0 +1,22 @@
+NPKernel file-backed mmap smoke
+Date: 2026-08-22
+
+Temporary payload: user/mmap.asm (restored after this run)
+Temporary initramfs input: initramfs/mmap-data.txt (removed after this run)
+Temporary kernel demo: NPK_ENABLE_USER_DEMO=1, /bin/mmap.elf (restored after this run)
+
+Build:
+  make -j2 all
+  result: success
+
+Run:
+  timeout 10s qemu-system-x86_64 -M q35 -m 512M -cdrom build/npkernel.iso -serial file:/tmp/npk-mmap-smoke-qemu-4.log -display none -no-reboot -no-shutdown
+  expected timeout status: 124 (kernel idles after user process exit)
+
+Observed serial evidence:
+  user syscall sequence included open(2), mmap(9), mmap(9), munmap(11), close(3), write(1), exit(60)
+  page faults at 0x1000000000 and 0x1000001000 were handled by the lazy file-backed path
+  process exit status = 0
+  no PANIC, fatal, #GP, or unhandled page-fault marker
+
+The temporary payload verified: immutable initramfs file mapping with known prefix, zero-fill on the page beyond EOF, rejection of PROT_WRITE|MAP_SHARED, and successful munmap/close. The pass marker was written to the framebuffer console; the serial-verifiable result is the process exit status 0.

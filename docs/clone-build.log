@@ -1,0 +1,12 @@
+clang --target=x86_64-unknown-none-elf -std=c17 -O2 -g3 -ffreestanding -fno-stack-protector -fno-stack-check -fno-pie -fno-plt -mno-red-zone -mcmodel=kernel -mno-sse -mno-sse2 -mno-mmx -mno-80387 -Wall -Wextra -Werror -Iinclude -MMD -MP -c src/memory/vm.c -o build/src/memory/vm.o
+clang --target=x86_64-unknown-none-elf -std=c17 -O2 -g3 -ffreestanding -fno-stack-protector -fno-stack-check -fno-pie -fno-plt -mno-red-zone -mcmodel=kernel -mno-sse -mno-sse2 -mno-mmx -mno-80387 -Wall -Wextra -Werror -Iinclude -MMD -MP -c src/memory/vmm.c -o build/src/memory/vmm.o
+clang --target=x86_64-unknown-none-elf -std=c17 -O2 -g3 -ffreestanding -fno-stack-protector -fno-stack-check -fno-pie -fno-plt -mno-red-zone -mcmodel=kernel -mno-sse -mno-sse2 -mno-mmx -mno-80387 -Wall -Wextra -Werror -Iinclude -MMD -MP -c src/arch/irq.c -o build/src/arch/irq.o
+clang --target=x86_64-unknown-none-elf -std=c17 -O2 -g3 -ffreestanding -fno-stack-protector -fno-stack-check -fno-pie -fno-plt -mno-red-zone -mcmodel=kernel -mno-sse -mno-sse2 -mno-mmx -mno-80387 -Wall -Wextra -Werror -Iinclude -MMD -MP -c src/arch/idt.c -o build/src/arch/idt.o
+clang --target=x86_64-unknown-none-elf -std=c17 -O2 -g3 -ffreestanding -fno-stack-protector -fno-stack-check -fno-pie -fno-plt -mno-red-zone -mcmodel=kernel -mno-sse -mno-sse2 -mno-mmx -mno-80387 -Wall -Wextra -Werror -Iinclude -MMD -MP -c src/syscall/syscall.c -o build/src/syscall/syscall.o
+clang --target=x86_64-unknown-none-elf -std=c17 -O2 -g3 -ffreestanding -fno-stack-protector -fno-stack-check -fno-pie -fno-plt -mno-red-zone -mcmodel=kernel -mno-sse -mno-sse2 -mno-mmx -mno-80387 -Wall -Wextra -Werror -Iinclude -MMD -MP -c src/proc/process.c -o build/src/proc/process.o
+src/proc/process.c:1072:17: error: use of undeclared identifier 'PROCESS_ENOSYS'
+ 1072 |         return -PROCESS_ENOSYS;
+      |                 ^
+1 error generated.
+make: *** [Makefile:92: build/src/proc/process.o] Error 1
+make: *** Waiting for unfinished jobs....

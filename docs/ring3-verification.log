@@ -1,0 +1,26 @@
+NPKernel opt-in ring-3 verification
+Date: 2026-08-16
+
+The isolated diagnostic build used NPK_ENABLE_USER_DEMO=1 and booted with:
+qemu-system-x86_64 -M pc -m 256M -cdrom build/npkernel.iso -drive if=ide,format=raw,file=build/npkernel-disk.img -serial file:build/ring3-fix.log -debugcon file:build/ring3-fix-debugcon.log -global isa-debugcon.iobase=0xe9 -display none -no-reboot -no-shutdown
+
+Observed serial markers:
+[INFO] proc: exec address-space root
+[INFO] elf: secure PT_LOAD pages
+[INFO] proc: exec loaded entry
+       value=0x0000000000400000
+[INFO] proc: created user pid
+       value=0x0000000000000002
+[INFO] user: launching ring3 pid
+       value=0x0000000000000002
+S[INFO] syscall: user syscall number
+       value=0x000000000000003c
+[INFO] proc: process exited
+       value=0x0000000000000002
+[INFO] syscall: exit syscall completed; yielding to scheduler
+[INFO] sched: kernel thread executed
+       value=0x0000005343484544
+
+Result: PASS. The validated hello.elf entered ring 3 at 0x400000, reached the first instruction of syscall_entry, completed Linux x86_64 syscall number 60, marked the process exited, and transferred control to the cooperative kernel thread. The diagnostic run contained no page fault, general-protection fault, or panic marker. The one-shot demo masks legacy PIC IRQ0/IRQ1 immediately before entry because full user-mode interrupt scheduling remains future work.
+
+The production source and final default image use NPK_ENABLE_USER_DEMO=0. Temporary S/F debugcon and serial markers were removed after the isolated test.
