@@ -4,6 +4,7 @@
 #include <npk/boot.h>
 #include <npk/elf.h>
 #include <npk/console.h>
+#include <npk/device_manager.h>
 #include <npk/heap.h>
 #include <npk/keyboard.h>
 #include <npk/log.h>
@@ -15,6 +16,7 @@
 #include <npk/smp.h>
 #include <npk/vfs.h>
 #include <npk/vm.h>
+#include <npk/usb.h>
 
 extern void vga_init(void);
 extern uint64_t limine_base_revision[3];
@@ -22,14 +24,17 @@ extern uint64_t limine_base_revision[3];
 #ifndef NPK_ENABLE_USER_DEMO
 #define NPK_ENABLE_USER_DEMO 0
 #endif
+#ifndef NPK_ENABLE_USER_SHELL
+#define NPK_ENABLE_USER_SHELL 1
+#endif
 
-#if NPK_ENABLE_USER_DEMO
-static void kernel_launch_user_demo(void) {
-    int fd = vfs_open("/bin/hello.elf");
+#if NPK_ENABLE_USER_SHELL || NPK_ENABLE_USER_DEMO
+static void kernel_launch_user_image(const char *path) {
+    int fd = vfs_open(path);
     ssize_t size = fd >= 0 ? vfs_size(fd) : -1;
     if (fd < 0 || size <= 0 || (uint64_t)size > 8 * 1024 * 1024) {
         if (fd >= 0) vfs_close(fd);
-        log_message(LOG_ERROR, "user", "hello.elf unavailable for ring3 launch");
+        log_message(LOG_ERROR, "user", "user ELF unavailable for ring3 launch");
         return;
     }
     void *image = kmalloc((size_t)size);
@@ -37,16 +42,20 @@ static void kernel_launch_user_demo(void) {
     vfs_close(fd);
     if (!loaded) {
         if (image) kfree(image);
-        log_message(LOG_ERROR, "user", "mmap.elf image read failed");
+        log_message(LOG_ERROR, "user", "user ELF image read failed");
         return;
     }
     process_t *process = process_exec_image(image, (size_t)size);
     kfree(image);
     if (!process) {
-        log_message(LOG_ERROR, "user", "secure exec rejected hello.elf");
+        log_message(LOG_ERROR, "user", "secure exec rejected user ELF");
         return;
     }
     LOG_INFOF("user", "launching ring3 pid", process->pid);
+#if NPK_ENABLE_USER_SHELL
+    log_set_console_output_enabled(false);
+#endif
+    console_clear();
     /* Keep PIT IRQ0 enabled so this also exercises preemptive scheduling. */
     process_launch_user(process);
 }
@@ -146,6 +155,7 @@ void kernel_main(void) {
     console_init();
     log_init();
     console_clear();
+    devmgr_init();
 
     console_write("NPKernel / No Problem Kernel\n");
     console_write("x86_64 | C17 + NASM | Limine + UEFI/GOP\n\n");
@@ -165,18 +175,25 @@ void kernel_main(void) {
     ata_init();
     process_init();
     vfs_init();
+    devmgr_load_default_config();
+    usb_init();
     syscall_init();
     kernel_demo();
 
     log_message(LOG_INFO, "boot", "NPKernel initialization complete; interrupts enabled");
-#if NPK_ENABLE_USER_DEMO
-    kernel_launch_user_demo();
+#if NPK_ENABLE_USER_SHELL
+    console_set_color(0xf2f5fa, 0x000000);
+    console_clear();
+    kernel_launch_user_image("/bin/bash.elf");
+#elif NPK_ENABLE_USER_DEMO
+    kernel_launch_user_image("/bin/hello.elf");
 #endif
     __asm__ volatile("sti");
     for (;;) {
         __asm__ volatile("hlt");
         acpi_poll();
         scheduler_tick();
+        usb_poll();
         if (scheduler_reschedule_pending()) scheduler_yield();
     }
 }

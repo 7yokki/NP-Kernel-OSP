@@ -2,16 +2,20 @@
 #include <npk/boot.h>
 #include <npk/arch.h>
 #include <npk/memory.h>
+#include <npk/string.h>
 
 static uint64_t cursor_x;
 static uint64_t cursor_y;
 static uint32_t foreground = 0xf2f5fa;
-static uint32_t background = 0x101820;
+static uint32_t background = 0x000000;
 static bool using_gop;
 static volatile uint16_t *vga_buffer;
 
 static uint16_t vga_cursor_x;
 static uint16_t vga_cursor_y;
+static uint8_t ansi_state;
+static char ansi_sequence[16];
+static size_t ansi_length;
 
 static void vga_putc_fallback(char c);
 
@@ -66,6 +70,8 @@ void console_init(void) {
 void console_clear(void) {
     cursor_x = cursor_y = 0;
     vga_cursor_x = vga_cursor_y = 0;
+    ansi_state = 0;
+    ansi_length = 0;
     if (using_gop) gop_clear(background);
 }
 
@@ -79,6 +85,29 @@ void console_putc(char c) { draw_codepoint((uint8_t)c); }
 void console_write_n(const char *s, size_t n) {
     for (size_t i = 0; i < n; ++i) {
         uint8_t c = (uint8_t)s[i];
+        if (ansi_state == 0 && c == 0x1b) { ansi_state = 1; continue; }
+        if (ansi_state == 1) {
+            ansi_state = c == '[' ? 2 : 0;
+            ansi_length = 0;
+            continue;
+        }
+        if (ansi_state == 2) {
+            if (c >= 0x40 && c <= 0x7e) {
+                ansi_sequence[ansi_length] = '\0';
+                if (c == 'J' && strcmp(ansi_sequence, "2") == 0) console_clear();
+                else if (c == 'H' && (ansi_length == 0 || strcmp(ansi_sequence, "1;1") == 0))
+                    cursor_x = cursor_y = 0;
+                else if (c == 'K' && using_gop)
+                    for (uint64_t x = cursor_x; x < gop_columns(); ++x)
+                        gop_draw_cell(x, cursor_y, ' ', foreground, background);
+                ansi_state = 0;
+                ansi_length = 0;
+                continue;
+            }
+            if (ansi_length + 1 < sizeof(ansi_sequence)) ansi_sequence[ansi_length++] = (char)c;
+            else { ansi_state = 0; ansi_length = 0; }
+            continue;
+        }
         uint32_t cp = c;
         size_t consumed = 1;
         if ((c & 0xe0) == 0xc0 && i + 1 < n && ((uint8_t)s[i + 1] & 0xc0) == 0x80) {

@@ -526,8 +526,10 @@ bool vm_handle_page_fault(process_t *process, vaddr_t fault_address,
     if (!process || !process->alive || !vmm_is_user_range(fault_address, 1)) return false;
     bool write = (error_code & 2ULL) != 0;
     if (error_code & 1ULL) {
-        npk_vma_t *vma = find_vma((npk_vma_t *)process->vmas, fault_address);
-        if (!write || !vma || !(vma->protection & NPK_PROT_WRITE)) return false;
+        /* VM_COW is set only on user pages which were writable before clone;
+         * executable ELF mappings need not have a VMA node, so the PTE marker
+         * is the authoritative permission check for these write faults. */
+        if (!write) return false;
         return vmm_resolve_cow_fault(process->address_space_root, fault_address);
     }
     bool instruction = (error_code & 16ULL) != 0;

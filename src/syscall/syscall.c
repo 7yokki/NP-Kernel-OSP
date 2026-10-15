@@ -6,6 +6,7 @@
 #include <npk/log.h>
 #include <npk/memory.h>
 #include <npk/process.h>
+#include <npk/usb.h>
 #include <npk/string.h>
 #include <npk/syscall.h>
 #include <npk/timer.h>
@@ -72,6 +73,15 @@ static npk_termios_t terminal_settings = {
     .c_ospeed = 15U,
 };
 static npk_winsize_t terminal_winsize = { .rows = 25, .columns = 80, .x_pixels = 0, .y_pixels = 0 };
+#define TTY_INPUT_LINE_MAX 512U
+#define TTY_ICANON 0x00000002U
+#define TTY_ECHO 0x00000008U
+static char tty_input_line[TTY_INPUT_LINE_MAX];
+static size_t tty_input_length;
+static size_t tty_input_offset;
+static char tty_echo_sequence[4];
+static size_t tty_echo_length;
+static size_t tty_echo_expected;
 
 static uint64_t neg_errno(uint64_t error) { return (uint64_t)(-(int64_t)error); }
 static int process_handle_for_fd(const process_t *process, int fd);
@@ -84,6 +94,11 @@ static bool copy_user_string(vaddr_t user, char *kernel, size_t capacity) {
     }
     kernel[capacity - 1] = '\0';
     return false;
+}
+
+static bool resolve_process_path(const process_t *process, const char *path,
+                                 char *resolved, size_t capacity) {
+    return process && vfs_resolve_path(process->cwd, path, resolved, capacity);
 }
 
 static uint64_t sys_write(uint64_t fd, vaddr_t user_buffer, uint64_t count) {
@@ -153,9 +168,12 @@ static uint64_t sys_fstat(uint64_t fd, vaddr_t user_status) {
 }
 
 static uint64_t sys_stat_path(vaddr_t user_path, vaddr_t user_status) {
+    process_t *process = process_current();
     char path[PATH_MAX_NPK];
+    char resolved[PATH_MAX_NPK];
     if (!copy_user_string(user_path, path, sizeof(path))) return neg_errno(EFAULT);
-    int handle = vfs_open(path);
+    if (!resolve_process_path(process, path, resolved, sizeof(resolved))) return neg_errno(ENAMETOOLONG);
+    int handle = vfs_open(resolved);
     if (handle < 0) return (uint64_t)handle;
     npk_linux_stat_t output;
     vfs_stat_t input;
@@ -191,13 +209,95 @@ static uint64_t sys_getdents64(uint64_t fd, vaddr_t user_buffer, uint64_t count)
     return (uint64_t)result;
 }
 
+static void tty_echo_byte(uint8_t byte) {
+    if ((byte & 0x80U) == 0) {
+        tty_echo_length = tty_echo_expected = 0;
+        console_write_n((const char *)&byte, 1);
+        return;
+    }
+    if ((byte & 0xc0U) == 0x80U && tty_echo_length != 0 && tty_echo_length < sizeof(tty_echo_sequence)) {
+        tty_echo_sequence[tty_echo_length++] = (char)byte;
+        if (tty_echo_length == tty_echo_expected) {
+            console_write_n(tty_echo_sequence, tty_echo_length);
+            tty_echo_length = tty_echo_expected = 0;
+        }
+        return;
+    }
+    tty_echo_length = 0;
+    tty_echo_expected = (byte & 0xe0U) == 0xc0U ? 2U :
+                        (byte & 0xf0U) == 0xe0U ? 3U :
+                        (byte & 0xf8U) == 0xf0U ? 4U : 0U;
+    if (tty_echo_expected == 0) {
+        static const char replacement[] = "?";
+        console_write(replacement);
+        return;
+    }
+    tty_echo_sequence[0] = (char)byte;
+    tty_echo_length = 1;
+}
+
+static void tty_collect_canonical_line(void) {
+    tty_input_length = 0;
+    tty_input_offset = 0;
+    tty_echo_length = tty_echo_expected = 0;
+    bool echo = (terminal_settings.c_lflag & TTY_ECHO) != 0;
+    for (;;) {
+        int input = keyboard_getchar_blocking();
+        if (input < 0) continue;
+        uint8_t byte = (uint8_t)input;
+        if (byte == '\b' || byte == 0x7fU) {
+            if (tty_input_length != 0) {
+                --tty_input_length;
+                while (tty_input_length != 0 &&
+                       (((uint8_t)tty_input_line[tty_input_length] & 0xc0U) == 0x80U))
+                    --tty_input_length;
+                if (echo) console_putc('\b');
+            }
+            tty_echo_length = tty_echo_expected = 0;
+            continue;
+        }
+        if (byte == '\r') byte = '\n';
+        if (byte == '\n') {
+            if (tty_input_length < sizeof(tty_input_line))
+                tty_input_line[tty_input_length++] = '\n';
+            if (echo) console_putc('\n');
+            return;
+        }
+        if ((byte < 0x20U && byte != '\t') || tty_input_length + 1 >= sizeof(tty_input_line))
+            continue;
+        tty_input_line[tty_input_length++] = (char)byte;
+        if (echo) tty_echo_byte(byte);
+    }
+}
+
 static uint64_t sys_getcwd(vaddr_t user_buffer, uint64_t size) {
-    static const char root[] = "/";
-    if (size < sizeof(root)) return neg_errno(34); /* ERANGE */
-    if (!vmm_is_user_range(user_buffer, sizeof(root))) return neg_errno(EFAULT);
-    if (!vmm_copyout(user_buffer, root, sizeof(root))) return neg_errno(EFAULT);
+    process_t *process = process_current();
+    if (!process) return neg_errno(EFAULT);
+    size_t length = strlen(process->cwd);
+    if (size < length + 1) return neg_errno(34); /* ERANGE */
+    if (!vmm_is_user_range(user_buffer, length + 1)) return neg_errno(EFAULT);
+    if (!vmm_copyout(user_buffer, process->cwd, length + 1)) return neg_errno(EFAULT);
     /* Raw Linux getcwd returns the string length, excluding the NUL. */
-    return sizeof(root) - 1;
+    return length;
+}
+
+static uint64_t sys_chdir(vaddr_t user_path) {
+    process_t *process = process_current();
+    char path[PATH_MAX_NPK];
+    char resolved[PATH_MAX_NPK];
+    if (!process || !copy_user_string(user_path, path, sizeof(path))) return neg_errno(EFAULT);
+    if (!resolve_process_path(process, path, resolved, sizeof(resolved))) return neg_errno(ENAMETOOLONG);
+    int handle = vfs_open(resolved);
+    if (handle < 0) return (uint64_t)handle;
+    vfs_stat_t status;
+    int result = vfs_stat_fd(handle, &status);
+    vfs_close(handle);
+    if (result < 0) return (uint64_t)result;
+    if (!status.is_directory) return neg_errno(20); /* ENOTDIR */
+    size_t length = strlen(resolved);
+    if (length >= sizeof(process->cwd)) return neg_errno(ENAMETOOLONG);
+    memcpy(process->cwd, resolved, length + 1);
+    return 0;
 }
 
 static uint64_t sys_read(uint64_t fd, vaddr_t user_buffer, uint64_t count) {
@@ -206,22 +306,28 @@ static uint64_t sys_read(uint64_t fd, vaddr_t user_buffer, uint64_t count) {
     if (handle < 0) return neg_errno(EBADF);
     if (!vmm_is_user_range(user_buffer, count)) return neg_errno(EFAULT);
     if (count == 0) return 0;
+    if (handle == 0) {
+        if ((terminal_settings.c_lflag & TTY_ICANON) == 0) {
+            int input = keyboard_getchar_blocking();
+            if (input < 0) return neg_errno(EINTR);
+            char byte = (char)input;
+            if ((terminal_settings.c_lflag & TTY_ECHO) != 0) tty_echo_byte((uint8_t)byte);
+            return vmm_copyout(user_buffer, &byte, 1) ? 1 : neg_errno(EFAULT);
+        }
+        if (tty_input_offset == tty_input_length) tty_collect_canonical_line();
+        uint64_t amount = count < IO_CHUNK ? count : IO_CHUNK;
+        size_t available = tty_input_length - tty_input_offset;
+        if (amount > available) amount = available;
+        if (!vmm_copyout(user_buffer, tty_input_line + tty_input_offset, (size_t)amount))
+            return neg_errno(EFAULT);
+        tty_input_offset += (size_t)amount;
+        if (tty_input_offset == tty_input_length) tty_input_offset = tty_input_length = 0;
+        return amount;
+    }
     char chunk[IO_CHUNK];
     uint64_t total = 0;
     while (total < count) {
         uint64_t amount = count - total < sizeof(chunk) ? count - total : sizeof(chunk);
-        if (handle == 0) {
-            uint64_t read = 0;
-            while (read < amount) {
-                int c = keyboard_getchar();
-                if (c < 0) break;
-                chunk[read++] = (char)c;
-                if (c == '\n') break;
-            }
-            if (!vmm_copyout(user_buffer + total, chunk, (size_t)read)) return neg_errno(EFAULT);
-            total += read;
-            break; /* A terminal read returns the available line fragment. */
-        }
         ssize_t result = vfs_read(handle, chunk, (size_t)amount);
         if (result < 0) return total ? total : (uint64_t)result;
         if (result == 0) break;
@@ -650,6 +756,9 @@ static uint64_t sys_poll_common(vaddr_t user_pollfds, uint64_t raw_count, int64_
         /* The timer interrupt supplies a bounded sleep interval, while other
          * threads and keyboard IRQs can make a descriptor ready between scans. */
         timer_sleep_ticks(1);
+        /* The USB host controller uses kernel polling rather than an IRQ
+         * completion path. Service it while userspace waits on stdin. */
+        usb_poll();
     }
 }
 
@@ -767,12 +876,15 @@ static bool copy_user_vector(vaddr_t user_vector, const char **kernel_vector, si
 
 static uint64_t sys_execve(syscall_frame_t *frame) {
     if (!frame) return neg_errno(EFAULT);
+    process_t *process = process_current();
     vaddr_t user_path = frame->rdi;
     vaddr_t user_argv = frame->rsi;
     vaddr_t user_envp = frame->rdx;
     char path[PATH_MAX_NPK];
+    char resolved[PATH_MAX_NPK];
     if (!copy_user_string(user_path, path, sizeof(path))) return neg_errno(user_path ? ENAMETOOLONG : EFAULT);
-    int fd = vfs_open(path);
+    if (!resolve_process_path(process, path, resolved, sizeof(resolved))) return neg_errno(ENAMETOOLONG);
+    int fd = vfs_open(resolved);
     if (fd < 0) return neg_errno(ENOENT);
     ssize_t image_size = vfs_size(fd);
     if (image_size <= 0 || (uint64_t)image_size > EXEC_MAX_IMAGE) { vfs_close(fd); return neg_errno(EINVAL); }
@@ -783,17 +895,20 @@ static uint64_t sys_execve(syscall_frame_t *frame) {
     if (read != image_size) { kfree(image); return neg_errno(EFAULT); }
     const char *argv[EXEC_MAX_VECTOR];
     const char *envp[EXEC_MAX_VECTOR];
-    char argument_storage[EXEC_STRING_STORAGE];
+    char *argument_storage = (char *)kmalloc(EXEC_STRING_STORAGE);
+    if (!argument_storage) { kfree(image); return neg_errno(ENOMEM); }
     size_t argc = 0, envc = 0, used = 0;
-    bool vectors_ok = copy_user_vector(user_argv, argv, EXEC_MAX_VECTOR, argument_storage, sizeof(argument_storage), &argc, &used) &&
-                      copy_user_vector(user_envp, envp, EXEC_MAX_VECTOR, argument_storage, sizeof(argument_storage), &envc, &used);
+    bool vectors_ok = copy_user_vector(user_argv, argv, EXEC_MAX_VECTOR, argument_storage, EXEC_STRING_STORAGE, &argc, &used) &&
+                      copy_user_vector(user_envp, envp, EXEC_MAX_VECTOR, argument_storage, EXEC_STRING_STORAGE, &envc, &used);
     if (!vectors_ok) {
+        kfree(argument_storage);
         kfree(image);
         return neg_errno(EFAULT);
     }
     int64_t result = process_exec_current(image, (size_t)image_size, argv, argc,
                                           envp, envc, frame);
-    if (result == 0) process_set_image_path(process_current(), path);
+    if (result == 0) process_set_image_path(process_current(), resolved);
+    kfree(argument_storage);
     kfree(image);
     return (uint64_t)result;
 }
@@ -802,9 +917,10 @@ static uint64_t sys_open_path(vaddr_t user_path, uint64_t raw_flags, uint64_t ra
     process_t *process = process_current();
     if (!process) return neg_errno(EFAULT);
     char path[PATH_MAX_NPK];
+    char resolved[PATH_MAX_NPK];
     if (!copy_user_string(user_path, path, sizeof(path))) return neg_errno(EFAULT);
-    if (path[0] != '/') return neg_errno(EINVAL);
-    int handle = vfs_open_flags(path, (uint32_t)raw_flags, (uint32_t)raw_mode);
+    if (!resolve_process_path(process, path, resolved, sizeof(resolved))) return neg_errno(ENAMETOOLONG);
+    int handle = vfs_open_flags(resolved, (uint32_t)raw_flags, (uint32_t)raw_mode);
     if (handle < 0) return (uint64_t)handle;
     int fd = process_install_new_fd(process, handle);
     if (fd < 0) {
@@ -816,9 +932,8 @@ static uint64_t sys_open_path(vaddr_t user_path, uint64_t raw_flags, uint64_t ra
 
 static uint64_t sys_openat_path(int64_t raw_dirfd, vaddr_t user_path,
                                 uint64_t raw_flags, uint64_t raw_mode) {
-    /* The current kernel has no cwd/name-resolution layer. Absolute paths and
-     * AT_FDCWD are still useful for libc; relative directory traversal stays
-     * rejected instead of being silently resolved against the wrong root. */
+    /* Directory-fd-relative resolution is not implemented; AT_FDCWD uses the
+     * process cwd through sys_open_path(). */
     if (raw_dirfd != -100)
         return neg_errno(EINVAL);
     return sys_open_path(user_path, raw_flags, raw_mode);
@@ -981,9 +1096,11 @@ static uint64_t sys_readlink_path(vaddr_t user_path, vaddr_t user_buffer, uint64
     process_t *process = process_current();
     if (!process || capacity == 0 || !vmm_is_user_range(user_buffer, capacity)) return neg_errno(EINVAL);
     char path[PATH_MAX_NPK];
+    char resolved[PATH_MAX_NPK];
     if (!copy_user_string(user_path, path, sizeof(path))) return neg_errno(EFAULT);
+    if (!resolve_process_path(process, path, resolved, sizeof(resolved))) return neg_errno(ENAMETOOLONG);
     const char *target = NULL;
-    if (strcmp(path, "/proc/self/exe") == 0 && process->image_path[0] != '\0')
+    if (strcmp(resolved, "/proc/self/exe") == 0 && process->image_path[0] != '\0')
         target = process->image_path;
     if (!target) return neg_errno(ENOENT);
     size_t length = strlen(target);
@@ -1007,7 +1124,6 @@ void syscall_cpu_init(void) {
 
 uint64_t syscall_dispatch(syscall_frame_t *frame) {
     if (frame == NULL) return neg_errno(EFAULT);
-    LOG_INFOF("syscall", "user syscall number", frame->rax);
     switch (frame->rax) {
         case NPK_SYS_READ: return sys_read(frame->rdi, frame->rsi, frame->rdx);
         case NPK_SYS_WRITE: return sys_write(frame->rdi, frame->rsi, frame->rdx);
@@ -1017,6 +1133,7 @@ uint64_t syscall_dispatch(syscall_frame_t *frame) {
         case NPK_SYS_FSTAT: return sys_fstat(frame->rdi, frame->rsi);
         case NPK_SYS_LSEEK: return sys_lseek(frame->rdi, frame->rsi, frame->rdx);
         case NPK_SYS_GETCWD: return sys_getcwd(frame->rdi, frame->rsi);
+        case NPK_SYS_CHDIR: return sys_chdir(frame->rdi);
         case NPK_SYS_GETDENTS64: return sys_getdents64(frame->rdi, frame->rsi, frame->rdx);
         case NPK_SYS_POLL: return sys_poll(frame->rdi, frame->rsi, (int64_t)frame->rdx);
         case NPK_SYS_PPOLL: return sys_ppoll(frame->rdi, frame->rsi, frame->rdx, frame->r10, frame->r8);
@@ -1139,6 +1256,7 @@ uint64_t syscall_dispatch_asm(uint64_t *raw) {
         thread->saved_interrupt_frame = raw;
         thread->saved_frame_kind = 1;
     }
+    process_reap_pending();
     syscall_frame_t frame = {0};
     frame.rax = raw[0]; frame.rbx = raw[1]; frame.rcx = raw[2]; frame.rdx = raw[3];
     frame.rsi = raw[4]; frame.rdi = raw[5]; frame.rbp = raw[6]; frame.r8 = raw[7];

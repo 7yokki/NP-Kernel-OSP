@@ -9,6 +9,10 @@
 #define USER_LIMIT 0x0000800000000000ULL
 #define KERNEL_PML4_FIRST 256U
 #define VM_PAGE_SIZE 0x80ULL /* internal page-table PS bit, not exposed as a leaf flag */
+#define MMIO_WINDOW_BASE 0xffffc00000000000ULL
+#define MMIO_WINDOW_SIZE 0x10000000ULL
+
+static vaddr_t mmio_next_virtual = MMIO_WINDOW_BASE;
 
 static bool canonical(uint64_t address) {
     uint64_t upper = address >> 48;
@@ -19,6 +23,8 @@ static uint64_t leaf_flags(uint64_t flags) {
     uint64_t value = VM_PRESENT;
     if (flags & VM_WRITE) value |= VM_WRITE;
     if (flags & VM_USER) value |= VM_USER;
+    if (flags & VM_PWT) value |= VM_PWT;
+    if (flags & VM_PCD) value |= VM_PCD;
     if (flags & VM_NX) value |= VM_NX;
     if (flags & VM_SHARED) value |= VM_SHARED;
     if (flags & VM_DEVICE) value |= VM_DEVICE;
@@ -305,6 +311,35 @@ void vmm_init(void) {
     LOG_INFOF("vmm", "user address limit", USER_LIMIT);
 }
 
+void *vmm_map_mmio(paddr_t physical_address, size_t length) {
+    if (!length || physical_address > UINT64_MAX - length) return NULL;
+    uint64_t offset = physical_address & (NPK_PAGE_SIZE - 1);
+    paddr_t physical_page = physical_address & ~(NPK_PAGE_SIZE - 1);
+    if ((uint64_t)length > UINT64_MAX - offset - (NPK_PAGE_SIZE - 1)) return NULL;
+    uint64_t span = (offset + (uint64_t)length + NPK_PAGE_SIZE - 1) & ~(NPK_PAGE_SIZE - 1);
+    if (mmio_next_virtual < MMIO_WINDOW_BASE ||
+        mmio_next_virtual - MMIO_WINDOW_BASE > MMIO_WINDOW_SIZE ||
+        span > MMIO_WINDOW_SIZE - (mmio_next_virtual - MMIO_WINDOW_BASE))
+        return NULL;
+
+    vaddr_t virtual_base = mmio_next_virtual;
+    uint64_t mapped = 0;
+    while (mapped < span) {
+        if (!vmm_map_page(virtual_base + mapped, physical_page + mapped,
+                          VM_WRITE | VM_NX | VM_DEVICE | VM_PCD | VM_PWT)) {
+            while (mapped) {
+                mapped -= NPK_PAGE_SIZE;
+                (void)vmm_unmap_page_root(read_cr3(), virtual_base + mapped);
+            }
+            LOG_ERRORF("vmm", "MMIO page mapping failed", physical_page);
+            return NULL;
+        }
+        mapped += NPK_PAGE_SIZE;
+    }
+    mmio_next_virtual += span;
+    return (void *)(virtual_base + offset);
+}
+
 void vmm_map_identity(vaddr_t start, vaddr_t end, uint64_t flags) {
     if (start > end || end == 0) return;
     start &= ~(NPK_PAGE_SIZE - 1);
@@ -317,15 +352,16 @@ void vmm_map_identity(vaddr_t start, vaddr_t end, uint64_t flags) {
 
 bool vmm_copyin(void *kernel_destination, vaddr_t user_source, size_t length) {
     if (kernel_destination == NULL || !vmm_is_user_range(user_source, length)) return false;
+    process_t *process = process_current();
+    paddr_t root = process && process->address_space_root ? process->address_space_root : read_cr3();
     uint8_t *destination = (uint8_t *)kernel_destination;
     uint64_t copied = 0;
     while (copied < length) {
         vaddr_t user_address = user_source + copied;
-        paddr_t physical = vmm_lookup_root(read_cr3(), user_address, VM_USER);
+        paddr_t physical = vmm_lookup_root(root, user_address, VM_USER);
         if (physical == 0) {
-            process_t *process = process_current();
             if (!vm_ensure_user_page(process, user_address, false)) return false;
-            physical = vmm_lookup_root(read_cr3(), user_address, VM_USER);
+            physical = vmm_lookup_root(root, user_address, VM_USER);
         }
         if (physical == 0) return false;
         uint64_t page_left = NPK_PAGE_SIZE - (user_address & (NPK_PAGE_SIZE - 1));
@@ -338,15 +374,18 @@ bool vmm_copyin(void *kernel_destination, vaddr_t user_source, size_t length) {
 
 bool vmm_copyout(vaddr_t user_destination, const void *kernel_source, size_t length) {
     if (kernel_source == NULL || !vmm_is_user_range(user_destination, length)) return false;
+    process_t *process = process_current();
+    paddr_t root = process && process->address_space_root ? process->address_space_root : read_cr3();
     const uint8_t *source = (const uint8_t *)kernel_source;
     uint64_t copied = 0;
     while (copied < length) {
         vaddr_t user_address = user_destination + copied;
-        paddr_t physical = vmm_lookup_root(read_cr3(), user_address, VM_USER | VM_WRITE);
+        paddr_t physical = vmm_lookup_root(root, user_address, VM_USER | VM_WRITE);
+        if (physical == 0 && vmm_resolve_cow_fault(root, user_address))
+            physical = vmm_lookup_root(root, user_address, VM_USER | VM_WRITE);
         if (physical == 0) {
-            process_t *process = process_current();
             if (!vm_ensure_user_page(process, user_address, true)) return false;
-            physical = vmm_lookup_root(read_cr3(), user_address, VM_USER | VM_WRITE);
+            physical = vmm_lookup_root(root, user_address, VM_USER | VM_WRITE);
         }
         if (physical == 0) return false;
         uint64_t page_left = NPK_PAGE_SIZE - (user_address & (NPK_PAGE_SIZE - 1));

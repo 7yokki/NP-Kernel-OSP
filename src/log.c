@@ -31,18 +31,25 @@ static void serial_write(const char *s) {
     while (*s) serial_putc(*s++);
 }
 
+static bool console_output_enabled = true;
+
 void log_init(void) { serial_init(); }
+void log_set_console_output_enabled(bool enabled) { console_output_enabled = enabled; }
 
 void log_message(log_level_t level, const char *component, const char *message) {
-    console_write("["); console_write(level_name(level)); console_write("] ");
-    console_write(component); console_write(": "); console_write(message); console_putc('\n');
+    if (console_output_enabled) {
+        console_write("["); console_write(level_name(level)); console_write("] ");
+        console_write(component); console_write(": "); console_write(message); console_putc('\n');
+    }
     serial_write("["); serial_write(level_name(level)); serial_write("] ");
     serial_write(component); serial_write(": "); serial_write(message); serial_putc('\n');
 }
 
 void logf(log_level_t level, const char *component, const char *message, uint64_t value) {
     log_message(level, component, message);
-    console_write("       value="); console_write_hex(value); console_putc('\n');
+    if (console_output_enabled) {
+        console_write("       value="); console_write_hex(value); console_putc('\n');
+    }
     serial_write("       value="); serial_write("0x");
     for (int i = 15; i >= 0; --i) {
         uint8_t digit = (value >> (i * 4)) & 0xf;

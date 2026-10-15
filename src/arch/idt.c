@@ -94,14 +94,18 @@ void page_fault_dispatch(uint64_t *wrapper) {
     uint64_t rip = frame_word(wrapper, 1, 0);
     uint64_t cs = frame_word(wrapper, 1, 1);
     uint64_t fault_address = read_cr2();
+    process_t *process = NULL;
+    vaddr_t user_rsp = 0;
+    if ((cs & 3) == 3) {
+        process = process_current();
+        user_rsp = frame_word(wrapper, 1, 3);
+        if (process && vm_handle_page_fault(process, fault_address, error, user_rsp)) return;
+    }
     LOG_ERRORF("page_fault", "fault address", fault_address);
     LOG_ERRORF("page_fault", "instruction pointer", rip);
     LOG_ERRORF("page_fault", "error code", error);
     LOG_ERRORF("page_fault", "code segment", cs);
     if ((cs & 3) == 3) {
-        process_t *process = process_current();
-        vaddr_t user_rsp = frame_word(wrapper, 1, 3);
-        if (process && vm_handle_page_fault(process, fault_address, error, user_rsp)) return;
         if (process_deliver_signal(wrapper, 11)) return;
         terminate_user_exception(11);
     }

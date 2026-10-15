@@ -1,3 +1,4 @@
+#include <npk/acpi.h>
 #include <npk/arch.h>
 #include <npk/elf.h>
 #include <npk/gop.h>
@@ -11,10 +12,12 @@
 #include <npk/timer.h>
 #include <npk/vm.h>
 #include <npk/vfs.h>
+#include <npk/usb.h>
 
 extern void syscall_set_current_process(process_t *process);
-extern void restore_interrupt_frame(uint64_t *frame);
-extern void restore_user_frame_from_kernel(uint64_t *frame);
+extern void restore_interrupt_frame(uint64_t *frame) __attribute__((noreturn));
+extern void restore_user_frame_from_kernel(uint64_t *frame) __attribute__((noreturn));
+extern void restore_syscall_frame_from_kernel(uint64_t *frame) __attribute__((noreturn));
 extern void enter_user_mode(uint64_t entry, uint64_t stack_top);
 extern void arch_halt(void);
 
@@ -24,6 +27,7 @@ static uint64_t next_pid = 1;
 static uint64_t next_tid = 1;
 static thread_t *current;
 static process_t *kernel_process;
+static thread_t *bsp_idle_thread;
 static uint64_t scheduler_ticks;
 static bool reschedule_pending;
 static paddr_t kernel_address_space_root;
@@ -177,6 +181,8 @@ static bool copyout_process(process_t *process, vaddr_t destination,
     while (copied < length) {
         vaddr_t address = destination + copied;
         paddr_t physical = vmm_lookup_root(process->address_space_root, address, VM_USER | VM_WRITE);
+        if (!physical && vmm_resolve_cow_fault(process->address_space_root, address))
+            physical = vmm_lookup_root(process->address_space_root, address, VM_USER | VM_WRITE);
         if (!physical) {
             if (!vm_ensure_user_page(process, address, true)) return false;
             physical = vmm_lookup_root(process->address_space_root, address, VM_USER | VM_WRITE);
@@ -690,6 +696,16 @@ static void reap_process(process_t *process) {
     memset(process, 0, sizeof(*process));
 }
 
+void process_reap_pending(void) {
+    process_t *parent = process_current();
+    if (!parent || parent->pending_reap_pid == 0) return;
+    uint64_t pid = parent->pending_reap_pid;
+    parent->pending_reap_pid = 0;
+    process_t *child = find_process_by_pid(pid);
+    if (child && child->parent_pid == parent->pid && !child->alive)
+        reap_process(child);
+}
+
 static void wake_parent_waiter(process_t *child) {
     if (!child || child->parent_pid == 0) return;
     process_t *parent = find_process_by_pid(child->parent_pid);
@@ -709,8 +725,8 @@ static void wake_parent_waiter(process_t *child) {
     if (!waiter) return;
     parent->wait_active = 0;
     parent->wait_result = status_ok ? (int64_t)child->pid : -PROCESS_EFAULT;
+    if (status_ok) parent->pending_reap_pid = child->pid;
     parent->wait_woken = 1;
-    if (status_ok) child->waited = 1;
     waiter->state = THREAD_READY;
     if (waiter->saved_interrupt_frame)
         waiter->saved_interrupt_frame[0] = (uint64_t)parent->wait_result;
@@ -735,6 +751,17 @@ static void scheduler_thread_bootstrap(void) {
     for (;;) scheduler_yield();
 }
 
+static void bsp_idle_entry(void *argument) {
+    (void)argument;
+    log_message(LOG_INFO, "sched", "BSP idle thread entered after user workload");
+    for (;;) {
+        __asm__ volatile("sti; hlt" ::: "memory");
+        acpi_poll();
+        usb_poll();
+        if (scheduler_reschedule_pending()) scheduler_yield();
+    }
+}
+
 static void activate_thread(thread_t *thread) {
     if (!thread || !thread->owner) return;
     current = thread;
@@ -747,7 +774,7 @@ static void activate_thread(thread_t *thread) {
     syscall_set_current_process(thread->owner);
 }
 
-static thread_t *next_runnable(thread_t *from) {
+static thread_t *find_next_runnable(thread_t *from, bool allow_idle) {
     unsigned start = 0;
     if (from >= threads && from < threads + NPK_MAX_THREADS)
         start = (unsigned)(from - threads);
@@ -755,10 +782,20 @@ static thread_t *next_runnable(thread_t *from) {
         unsigned index = (start + offset) % NPK_MAX_THREADS;
         thread_t *candidate = &threads[index];
         if (candidate == &threads[0] && candidate != from) continue;
+        if (!allow_idle && candidate == bsp_idle_thread) continue;
         if (candidate->state == THREAD_READY && candidate->owner && candidate->owner->alive)
             return candidate;
     }
     return NULL;
+}
+
+static thread_t *next_runnable(thread_t *from) {
+    thread_t *candidate = find_next_runnable(from, false);
+    return candidate ? candidate : find_next_runnable(from, true);
+}
+
+static thread_t *next_non_idle_runnable(thread_t *from) {
+    return find_next_runnable(from, false);
 }
 
 void process_init(void) {
@@ -768,6 +805,7 @@ void process_init(void) {
     kernel_process->pid = next_pid++;
     kernel_process->thread_count = 1;
     kernel_process->alive = 1;
+    memcpy(kernel_process->cwd, "/", 2);
     kernel_address_space_root = vmm_current_root();
     for (unsigned i = 0; i < NPK_MAX_FDS; ++i) kernel_process->fds[i] = -1;
     kernel_process->fds[0] = 0; kernel_process->fds[1] = 1; kernel_process->fds[2] = 2;
@@ -781,8 +819,11 @@ void process_init(void) {
     thread->group_leader = 1;
     current = thread;
     syscall_set_current_process(kernel_process);
+    bsp_idle_thread = scheduler_create_kernel_thread(bsp_idle_entry, NULL);
+    if (!bsp_idle_thread) panic("failed to create BSP idle thread");
     LOG_INFOF("proc", "kernel pid", kernel_process->pid);
     LOG_INFOF("proc", "kernel tid", thread->tid);
+    LOG_INFOF("sched", "BSP idle thread tid", bsp_idle_thread->tid);
 }
 
 process_t *process_create_user(paddr_t address_space_root, uint64_t entry, uint64_t stack_top) {
@@ -810,6 +851,7 @@ process_t *process_create_user(paddr_t address_space_root, uint64_t entry, uint6
         process->pid = next_pid++;
         process->thread_count = 1;
         process->alive = 1;
+        memcpy(process->cwd, "/", 2);
         process->address_space_root = address_space_root;
         process->main_thread = thread;
         thread->group_leader = 1;
@@ -1230,6 +1272,7 @@ int64_t process_fork(const struct syscall_frame *parent_frame) {
     child->user_stack_bottom = parent->user_stack_bottom;
     child->user_stack_limit = parent->user_stack_limit;
     memcpy(child->image_path, parent->image_path, sizeof(child->image_path));
+    memcpy(child->cwd, parent->cwd, sizeof(child->cwd));
     memcpy(child->fds, parent->fds, sizeof(child->fds));
     memcpy(child->fd_flags, parent->fd_flags, sizeof(child->fd_flags));
     unsigned retained_fds = 0;
@@ -1458,10 +1501,9 @@ int64_t process_wait4(int64_t target_pid, vaddr_t user_status, uint64_t options)
         has_child = true;
         if (child->alive) continue;
         uint32_t status = (uint32_t)child->exit_status << 8;
-        if (user_status && !copyout_process(parent, user_status, &status, sizeof(status)))
+        if (user_status && !vmm_copyout(user_status, &status, sizeof(status)))
             return -PROCESS_EFAULT;
         int64_t result = (int64_t)child->pid;
-        child->waited = 1;
         reap_process(child);
         return result;
     }
@@ -1487,7 +1529,15 @@ int64_t process_wait4(int64_t target_pid, vaddr_t user_status, uint64_t options)
         current->state = THREAD_RUNNING;
         if (child_pid != 0) {
             process_t *child = find_process_by_pid(child_pid);
-            if (child && !child->alive && child->waited) reap_process(child);
+            if (child && !child->alive) {
+                uint32_t status = (uint32_t)child->exit_status << 8;
+                if (parent->wait_status_user &&
+                    !vmm_copyout(parent->wait_status_user, &status, sizeof(status))) {
+                    result = -PROCESS_EFAULT;
+                } else {
+                    reap_process(child);
+                }
+            }
         }
         return result;
     }
@@ -1499,6 +1549,12 @@ int64_t process_wait4(int64_t target_pid, vaddr_t user_status, uint64_t options)
 
 thread_t *scheduler_current(void) { return current; }
 process_t *process_current(void) { return current ? current->owner : NULL; }
+
+void scheduler_wake_thread(thread_t *thread) {
+    if (!thread || thread->state != THREAD_BLOCKED) return;
+    thread->state = THREAD_READY;
+    reschedule_pending = true;
+}
 
 void process_set_image_path(process_t *process, const char *path) {
     if (!process) return;
@@ -1545,7 +1601,7 @@ void scheduler_tick(void) {
     futex_expire_waiters();
     if (!current) return;
     current->state = THREAD_RUNNING;
-    reschedule_pending = next_runnable(current) != NULL;
+    reschedule_pending = next_non_idle_runnable(current) != NULL;
 }
 
 uint64_t *scheduler_preempt(uint64_t *interrupt_frame) {
@@ -1558,13 +1614,13 @@ uint64_t *scheduler_preempt(uint64_t *interrupt_frame) {
      * the CPU is the authoritative privilege indicator. */
     bool interrupted_user = (interrupt_frame[16] & 3ULL) == 3ULL;
     if (!interrupted_user) {
-        reschedule_pending = next_runnable(current) != NULL;
+        reschedule_pending = next_non_idle_runnable(current) != NULL;
         return interrupt_frame;
     }
     current->saved_interrupt_frame = interrupt_frame;
     current->saved_frame_kind = 0;
     current->state = THREAD_RUNNING;
-    thread_t *next_thread = next_runnable(current);
+    thread_t *next_thread = next_non_idle_runnable(current);
     if (!next_thread) {
         reschedule_pending = false;
         return interrupt_frame;
@@ -1588,8 +1644,6 @@ void scheduler_yield(void) {
      * call-site as if it were the user thread's return frame. */
     __asm__ volatile("cli" ::: "memory");
     thread_t *old_thread = current;
-    process_t *old_process = old_thread ? old_thread->owner : NULL;
-    bool old_user_thread = old_thread && old_thread->privilege_ring == 3;
     thread_t *next_thread = next_runnable(old_thread);
     if (!old_thread || !next_thread || next_thread == old_thread) {
         reschedule_pending = false;
@@ -1604,8 +1658,8 @@ void scheduler_yield(void) {
     if (old_thread->state == THREAD_RUNNING) old_thread->state = THREAD_READY;
     if (!blocked_old_thread) old_thread->saved_interrupt_frame = NULL;
     activate_thread(next_thread);
-    if (old_process && old_process->waited && !old_process->alive)
-        reap_process(old_process);
+    /* Reaping here is unsafe: scheduler_yield still executes on old_thread's
+     * kernel stack. A resumed parent wait4 frame owns child reclamation. */
     reschedule_pending = false;
     if (next_thread->privilege_ring == 0) {
         /* A terminating syscall cannot return through SYSRET. The target
@@ -1619,8 +1673,11 @@ void scheduler_yield(void) {
         if (next_thread->saved_frame_kind == 0 &&
             (next_thread->saved_interrupt_frame[16] & 3ULL) == 3ULL)
             (void)process_deliver_pending_signal(next_thread->saved_interrupt_frame);
-        if (old_user_thread)
+        if (next_thread->privilege_ring == 3) {
+            if (next_thread->saved_frame_kind == 1)
+                restore_syscall_frame_from_kernel(next_thread->saved_interrupt_frame);
             restore_user_frame_from_kernel(next_thread->saved_interrupt_frame);
+        }
         restore_interrupt_frame(next_thread->saved_interrupt_frame);
     }
     context_switch(&old_thread->context, &next_thread->context);

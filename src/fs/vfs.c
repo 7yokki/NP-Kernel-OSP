@@ -130,7 +130,9 @@ typedef struct {
     int64_t offset;
     uint16_t record_length;
     uint8_t type;
-} dirent64_header_t;
+} __attribute__((packed)) dirent64_header_t;
+
+_Static_assert(sizeof(dirent64_header_t) == 19, "Linux getdents64 header layout");
 
 static descriptor_t files[MAX_INITRD_FILES + MAX_OPEN_DESCRIPTORS];
 static unsigned file_count;
@@ -468,7 +470,11 @@ static bool canonicalize_path(const char *path, char *canonical, size_t capacity
         while (path[input] != '\0' && path[input] != '/') ++input;
         size_t length = input - start;
         if (length == 1 && path[start] == '.') continue;
-        if (length == 2 && path[start] == '.' && path[start + 1] == '.') return false;
+        if (length == 2 && path[start] == '.' && path[start + 1] == '.') {
+            while (output > 0 && canonical[output - 1] != '/') --output;
+            if (output > 0) --output;
+            continue;
+        }
         if (output + 1 + length >= capacity) return false;
         canonical[output++] = '/';
         memcpy(canonical + output, path + start, length);
@@ -477,6 +483,25 @@ static bool canonicalize_path(const char *path, char *canonical, size_t capacity
     if (output == 0) canonical[output++] = '/';
     canonical[output] = '\0';
     return true;
+}
+
+bool vfs_resolve_path(const char *cwd, const char *path, char *resolved, size_t capacity) {
+    if (!cwd || !path || !resolved || capacity < 2 || cwd[0] != '/' || path[0] == '\0') return false;
+    char joined[VFS_NAME_CAPACITY];
+    size_t cwd_length = strlen(cwd);
+    size_t path_length = strlen(path);
+    if (path[0] == '/') {
+        if (path_length >= sizeof(joined)) return false;
+        memcpy(joined, path, path_length + 1);
+    } else {
+        size_t separator = cwd_length != 0 && cwd[cwd_length - 1] == '/' ? 0 : 1;
+        if (cwd_length + separator + path_length >= sizeof(joined)) return false;
+        memcpy(joined, cwd, cwd_length);
+        size_t offset = cwd_length;
+        if (separator) joined[offset++] = '/';
+        memcpy(joined + offset, path, path_length + 1);
+    }
+    return canonicalize_path(joined, resolved, capacity);
 }
 
 static bool initrd_name_matches(const char *archive_name, const char *canonical) {
