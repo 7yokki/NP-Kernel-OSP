@@ -101,6 +101,9 @@ npkernel/
 ├── docs/               # Design and verification records
 └── build/              # Generated ELF, ISO, symbols and test captures
 ```
+## Tarihçe
+
+Proje GitHub'a sadece 2 ay önce civarında (Temmuz veya Ağustos 2026) yüklenmiştir (v0.4 sürümü olarak) fakat aslında v0.1 Erken dönem versiyonu da vardır ve proje 2025 civarlarında yazılmaya başlanmıştır. Mevcut sürümü olan v0.8 ise tam release'den önce küçük bugfixler üzerine güncellenmeye devam edilen ara sürümdür. 
 
 ## Derleme ve çalıştırma
 
