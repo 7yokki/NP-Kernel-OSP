@@ -42,6 +42,7 @@ void vfs_init(void);
 
 int vfs_open(const char *path);
 int vfs_open_flags(const char *path, uint32_t flags, uint32_t mode);
+bool vfs_resolve_path(const char *cwd, const char *path, char *resolved, size_t capacity);
 ssize_t vfs_read(int fd, void *buffer, size_t count);
 /* Offset reads do not mutate descriptor->offset and are used by lazy VM faults. */
 ssize_t vfs_read_at(int fd, void *buffer, size_t count, uint64_t offset);
@@ -69,4 +70,3 @@ int vfs_epoll_ctl(int epfd, int operation, int fd, uint32_t events, uint64_t dat
 ssize_t vfs_epoll_wait(int epfd, vfs_epoll_event_t *events, size_t capacity);
 
 #endif
-

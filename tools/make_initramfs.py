@@ -41,7 +41,10 @@ for path in sorted(ROOT.rglob('*')):
     if path.is_file():
         relative = path.relative_to(ROOT).as_posix()
         archive += record(relative, path.read_bytes(), 0o100644)
-for name in ('hello', 'mmap', 'fork'):
+device_catalog = PROJECT_ROOT / 'user' / 'ddc.json'
+if device_catalog.is_file():
+    archive += record('ddc.json', device_catalog.read_bytes(), 0o100644)
+for name in ('hello', 'mmap', 'fork', 'bash'):
     user_elf = OUTPUT.parent / 'user' / f'{name}.elf'
     if user_elf.is_file():
         archive += record(f'bin/{name}.elf', user_elf.read_bytes(), 0o100755)

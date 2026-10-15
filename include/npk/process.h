@@ -9,7 +9,7 @@ struct npk_vma;
 struct syscall_frame;
 
 #define NPK_MAX_FDS 32
-#define NPK_KERNEL_STACK_SIZE 16384U
+#define NPK_KERNEL_STACK_SIZE 65536U
 #define NPK_USER_STACK_TOP 0x00007ffffff00000ULL
 #define NPK_USER_STACK_PAGES 32U
 #define NPK_SIGNAL_MAX 64U
@@ -92,12 +92,12 @@ typedef struct process {
     uint8_t alive;
     uint8_t exit_status;
     uint8_t group_exiting;
-    uint8_t waited;
     uint8_t wait_active;
     int64_t wait_target;
     vaddr_t wait_status_user;
     uint64_t wait_options;
     int64_t wait_result;
+    uint64_t pending_reap_pid;
     uint8_t wait_woken;
     uint64_t address_space_root;
     uint64_t image_base;
@@ -109,6 +109,7 @@ typedef struct process {
     uint64_t user_stack_bottom;
     uint64_t user_stack_limit;
     char image_path[NPK_PROCESS_PATH_MAX];
+    char cwd[NPK_PROCESS_PATH_MAX];
     struct {
         int handle;
         uint32_t fd_flags;
@@ -144,6 +145,7 @@ void scheduler_tick(void);
  * frame pointer that the assembly wrapper must restore before IRETQ. */
 uint64_t *scheduler_preempt(uint64_t *interrupt_frame);
 void scheduler_yield(void);
+void scheduler_wake_thread(thread_t *thread);
 bool scheduler_reschedule_pending(void);
 thread_t *scheduler_create_kernel_thread(void (*entry)(void *), void *argument);
 void context_switch(cpu_context_t *old_context, const cpu_context_t *new_context);
@@ -152,6 +154,7 @@ int64_t process_fork(const struct syscall_frame *parent_frame);
 int64_t process_clone(uint64_t flags, vaddr_t child_stack, vaddr_t parent_tid,
                       vaddr_t tls, vaddr_t child_tid, const struct syscall_frame *parent_frame);
 void process_exit_thread_current(uint8_t status);
+void process_reap_pending(void);
 int64_t process_set_tid_address(vaddr_t clear_child_tid);
 
 /* Deliver a synchronous signal into the currently faulting user thread. The

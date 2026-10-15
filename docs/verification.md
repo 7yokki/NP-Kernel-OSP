@@ -1,6 +1,6 @@
 # NPKernel doğrulama kaydı
 
-Bu kayıt NPKernel’in dynamic ELF handoff, bounded thread-group, poll/epoll, persistent NPKFS, Limine MP/AP bring-up, realtime signal payload queue, preemptive scheduler, lazy VM, fork/COW, process cleanup ve wait4/waitpid çalışmalarından sonraki durumunu özetler. Testler x86_64 QEMU üzerinde, seri çıktı `/tmp` altındaki kayıt dosyalarına alınarak yürütülmüştür.
+Bu kayıt NPKernel’in dynamic ELF handoff, bounded thread-group, poll/epoll, persistent NPKFS, Limine MP/AP bring-up, realtime signal payload queue, preemptive scheduler, lazy VM, fork/COW, process cleanup, wait4/waitpid, blocking TTY ve bounded ring-3 shell çalışmalarından sonraki durumunu özetler. Testler x86_64 QEMU üzerinde, seri çıktı kaydedilerek yürütülmüştür.
 
 ## Temiz build
 
@@ -11,7 +11,7 @@ make clean
 make -j2 all disk
 ```
 
-Derleme Clang freestanding C17, NASM, `ld.lld`, `objcopy`, Limine v9.x-binary ve `xorriso` ile tamamlandı. `build/npkernel.elf`, `build/npkernel.iso`, disk imajı ve initramfs üretildi. Üretim ayarında `NPK_ENABLE_USER_DEMO=0` bırakıldı; böylece ring-3 payload’ı normal boot sırasında otomatik başlatılmıyor.
+Derleme Clang freestanding C17, NASM, `ld.lld`, `objcopy`, Limine v9.x-binary ve `xorriso` ile tamamlandı. `build/npkernel.elf`, `build/npkernel.iso`, disk imajı ve initramfs üretildi. Güncel varsayılan ayarlar `NPK_ENABLE_USER_DEMO=0` ve `NPK_ENABLE_USER_SHELL=1` değerleridir: legacy demo payload’ı kapalı, bounded shell ELF’i ise normal boot sırasında başlatılır. Önceki production boot kayıtları shell varsayılanı eklenmeden önce alınmıştır; güncel ring-3 shell doğrulaması aşağıdaki bölümde ayrı raporlanır.
 
 ## BIOS/SeaBIOS smoke testi
 
@@ -88,7 +88,7 @@ Her iki testte serial log `process exited`, ilgili fault termination kaydı ve s
 
 ## TTY, display ve yapılandırılmış input
 
-GOP yalnızca text-cell terminal surface olarak kullanılır. Limine 1920×1080×32 modu ister; firmware bu modu sağlayamazsa mevcut GOP modu kullanılır. Font 10×16 bold bitmap glyph’lerden oluşur ve hücreler 2× ölçeklenir. Console newline, tab, backspace, satır kaydırma ve Türkçe karakterlerin UTF-8 çıktı yolunu destekler. GUI, pencere, panel veya sprite çizimi yoktur. PS/2 set-1 keyboard path Türkçe Q düzenini ve `ş ğ ü ö ç İ Ş Ğ Ü Ö Ç` karakterlerini tanır.
+GOP yalnızca text-cell terminal surface olarak kullanılır. Limine yaklaşık 1024×768×32 modu ister; firmware bu modu sağlayamazsa mevcut GOP modu kullanılır. Font 10×16 bold bitmap glyph’lerden oluşur ve hücreler 2× ölçeklenir. Console newline, tab, backspace, satır kaydırma ve Türkçe karakterlerin UTF-8 çıktı yolunu destekler. GUI, pencere, panel veya sprite çizimi yoktur. PS/2 set-1 Türkçe Q geriye dönük yolu ile USB HID boot keyboard aynı kernel input text queue’sunu kullanır. TTY canonical/blocking read sağlar; ring-3 shell blink imleci için raw karakter okuması ve poll kullanır.
 
 Yeni display/input smoke’unda geçici ring-3 payload’ı `NPK_SYS_NPK_DISPLAY_INFO`, `DISPLAY_CLAIM`, owner-only `INPUT_READ`, kernel-controlled `DISPLAY_MAP`, `DISPLAY_RELEASE` ve `exit(0)` sırasını tamamladı; mapped framebuffer byte’ına erişim page fault üretmedi. Display map fiziksel adres/uzunluk kabul etmedi ve release sırasında device VMA revoke edildi. Kanıt: [`docs/display-input-smoke.log`](display-input-smoke.log).
 
@@ -225,3 +225,51 @@ Fresh production QEMU matrix:
 | UEFI/OVMF Q35 | Expected timeout `124`; initialization complete, PCI/mouse, no fatal marker | [`docs/final-v04-uefi.log`](final-v04-uefi.log) |
 
 Q35’ye `if=ide` ile disk eklenen ayrı denemede firmware/controller modeli ATA PIO primary cihazı sunmadı ve kernel bunu `persistent NPKFS unavailable` uyarısıyla kontrollü biçimde raporladı; bu bir panic değildir. Persistent disk gate’i bu nedenle ATA sürücüsünün desteklediği legacy PC + IDE konfigürasyonunda değerlendirildi. Hiçbir production QEMU kaydında `user: launching`, `PANIC`, `fatal page fault` veya general-protection fault bulunmadı.
+
+
+## USB HID boot keyboard doğrulaması (2026-10-14)
+
+Temiz çalışma ağacında aşağıdaki kapılar bu sırayla başarılı oldu:
+
+```bash
+make clean
+make -j2 all
+make check
+make test-elf-corpus
+make test-device-manager
+make test-usb-keyboard
+make test-usb-qemu
+```
+
+| Kapı | Sonuç |
+|---|---|
+| Clean freestanding kernel + ISO build | Başarılı |
+| ELF adversarial corpus | 38/38 geçti |
+| Device Manager host suite | 12/12 geçti |
+| HID boot-report host suite | 19/19 geçti |
+| QEMU q35 + qemu-xhci + usb-kbd | USB interface tanındı; xHCI endpoint yapılandırıldı; `usb_generic_keyboard` bağlandı |
+| QMP keyboard input | Usage `0x04`–`0x0b` için press/release raporları kernel loguna ulaştı; toplam 16 completion 16-TRB interrupt ring wrap/cycle geçişini de geçti |
+
+Ham seri kanıt: [`docs/qemu-usb-hid-keyboard.log`](qemu-usb-hid-keyboard.log). QMP `send-key` şeması için QEMU QMP Reference Manual, HID boot protocol/report alanları ve ikinci rapor baytının yok sayılması için USB-IF HID 1.11, usage eşlemesi için USB-IF HID Usage Tables §10, xHCI Configure Endpoint/interval/ring cycle alanları için Intel xHCI 1.2 Specification esas alındı; kaynak bağlantıları [`docs/usb-xhci-design.md`](usb-xhci-design.md) içindedir.
+
+PS/2 geriye dönük sürücüsü kaldırılmadı: arşivdeki özgün `keyboard.c` içinde `static uint16_t extended_key_code` noktasından sonraki PS/2 handler/backend bölümü çalışma kopyasıyla byte-for-byte aynı kaldı; HID input adapter’ı ilave edildi. Test, QEMU sanal USB cihazı kapsamındadır; fiziksel donanım uyumluluk testi değildir. Destek sınırları için [`docs/device-manager.md`](device-manager.md) ve [`docs/usb-xhci-design.md`](usb-xhci-design.md) belgelerine bakın.
+
+
+## Default ring-3 shell and blocking TTY verification
+
+Final clean verification (2026-10-14) completed from the project root:
+
+```bash
+make clean
+make -j2 all
+make check
+make test-elf-corpus
+make test-device-manager
+make test-usb-keyboard
+make test-usb-qemu
+make test-bash-qemu
+```
+
+All commands exited successfully. The host suites reported `ELF_CORPUS total=38 failed=0`, `DEVICE_MANAGER_TESTS passed=12 failed=0`, and `USB_GENERIC_KEYBOARD_TESTS passed=19 failed=0`. The USB QEMU smoke recognized/bound the HID boot keyboard and injected 16 press/release reports across the interrupt-ring wrap. The Bash QEMU smoke booted `/bin/bash.elf` in ring 3 at 1024×768, injected 12 USB-HID commands, exercised raw stdin/stdout line editing, Turkish-Q `*e ? ! ^ + % & / ( ) = _` symbol entry, `pwd`, `/bin` directory listing and `cd`, `uname -a`, procfs-backed `ps`/`free`, then used `exec hello.elf` to verify the `execve` replacement and ELF exit path. The smoke samples idle GOP frames throughout a two-second blink cycle and requires at least one changed frame for the underscore cursor. Serial evidence contains the shell ELF exit syscall marker and no panic/exception. The resulting framebuffer is nonblank and 1024×768.
+
+Evidence: [`qemu-bash-shell-smoke.png`](qemu-bash-shell-smoke.png) (final visible GOP screen), [`qemu-bash-turkish-q-symbols.png`](qemu-bash-turkish-q-symbols.png) (USB-HID typed punctuation), and [`qemu-bash-shell-smoke.log`](qemu-bash-shell-smoke.log) (serial boot/input/exit log). The shell is a bounded NPK freestanding shell, not GNU Bash: external ELF launch is an explicit `exec` replacement, not a fork/wait child runner; expansions, pipes, redirection, globbing, job control and full Linux libc/application compatibility are not claimed.

@@ -22,6 +22,7 @@ paddr_t vmm_unmap_page_root(paddr_t root, vaddr_t virtual_address);
 void vmm_unmap(vaddr_t virtual_address);
 bool vmm_is_user_range(vaddr_t address, uint64_t length);
 paddr_t vmm_lookup_root(paddr_t root, vaddr_t virtual_address, uint64_t required_flags);
+void *vmm_map_mmio(paddr_t physical_address, size_t length);
 paddr_t vmm_clone_user_space(paddr_t parent_root);
 bool vmm_resolve_cow_fault(paddr_t root, vaddr_t virtual_address);
 bool vmm_copyin(void *kernel_destination, vaddr_t user_source, size_t length);
@@ -32,6 +33,8 @@ paddr_t virt_to_phys(const void *virtual_address);
 #define VM_PRESENT (1ULL << 0)
 #define VM_WRITE   (1ULL << 1)
 #define VM_USER    (1ULL << 2)
+#define VM_PWT     (1ULL << 3) /* x86 page-table write-through */
+#define VM_PCD     (1ULL << 4) /* x86 page-table cache disable */
 #define VM_NX      (1ULL << 63)
 #define VM_COW     (1ULL << 9) /* software COW marker in available PTE bits */
 #define VM_SHARED  (1ULL << 10) /* software marker for shared writable user pages */

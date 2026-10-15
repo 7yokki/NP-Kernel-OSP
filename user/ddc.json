@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "categories": [
+    {
+      "bus": "usb",
+      "class": 3,
+      "subclass": 1,
+      "protocol": 1,
+      "type": "keyboard",
+      "generic_name": "Generic Keyboard",
+      "driver": "usb_hid_keyboard"
+    },
+    {
+      "bus": "usb",
+      "class": 3,
+      "subclass": 1,
+      "protocol": 0,
+      "type": "keyboard",
+      "generic_name": "Generic Keyboard",
+      "driver": "usb_hid_keyboard"
+    },
+    {
+      "bus": "usb",
+      "class": 3,
+      "subclass": 1,
+      "protocol": 2,
+      "type": "mouse",
+      "generic_name": "Generic USB Mouse",
+      "driver": "usb_hid_mouse"
+    }
+  ],
+  "products": [
+    {
+      "vid": 1575,
+      "pid": 1,
+      "type": "keyboard",
+      "name": "QEMU USB Keyboard"
+    }
+  ]
+}

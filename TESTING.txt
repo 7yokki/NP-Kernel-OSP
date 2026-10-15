@@ -1,0 +1,6 @@
+NPKernel mini-libc + Bash test package
+
+Bootable image: build/npkernel.iso
+Build source: project root; run make all
+Regression commands: make test-user-libc, make check, make test-bash-qemu
+QEMU shell smoke covers Turkish-Q USB input, Bash -c, script interpretation, foreground/background process execution, wait/jobs, and persistent-file operations.

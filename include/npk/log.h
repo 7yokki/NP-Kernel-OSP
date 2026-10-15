@@ -5,6 +5,7 @@
 
 typedef enum { LOG_TRACE, LOG_INFO, LOG_WARN, LOG_ERROR, LOG_FATAL } log_level_t;
 void log_init(void);
+void log_set_console_output_enabled(bool enabled);
 void log_message(log_level_t level, const char *component, const char *message);
 void logf(log_level_t level, const char *component, const char *message, uint64_t value);
 #define LOG_TRACEF(c,m,v) logf(LOG_TRACE,(c),(m),(v))

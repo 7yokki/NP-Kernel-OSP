@@ -31,6 +31,7 @@ GLOBAL enter_user_mode
 GLOBAL context_switch
 GLOBAL restore_interrupt_frame
 GLOBAL restore_user_frame_from_kernel
+GLOBAL restore_syscall_frame_from_kernel
 GLOBAL restore_kernel_frame
 EXTERN kernel_main
 EXTERN exception_dispatch
@@ -500,6 +501,29 @@ restore_interrupt_frame:
 restore_user_frame_from_kernel:
     swapgs
     jmp restore_interrupt_frame
+
+; Restore the raw SYSCALL frame saved by syscall_entry. Unlike the common
+; interrupt wrapper, its GPR order is rax,rbx,rcx,rdx,rsi,rdi,rbp,r8..r15.
+; RDI points at that frame; the IRET frame follows the fifteen GPR slots.
+restore_syscall_frame_from_kernel:
+    swapgs
+    mov rsp, rdi
+    pop rax
+    pop rbx
+    pop rcx
+    pop rdx
+    pop rsi
+    pop rdi
+    pop rbp
+    pop r8
+    pop r9
+    pop r10
+    pop r11
+    pop r12
+    pop r13
+    pop r14
+    pop r15
+    iretq
 
 ; Restore a kernel-only preemption frame. The frame contains fifteen GPRs,
 ; followed by RIP, CS, and RFLAGS. Kernel-to-kernel transfer uses RET rather

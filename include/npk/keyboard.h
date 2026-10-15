@@ -21,6 +21,10 @@ typedef struct {
 #define NPK_INPUT_MOD_SHIFT (1U << 0)
 #define NPK_INPUT_MOD_CAPSLOCK (1U << 1)
 #define NPK_INPUT_MOD_EXTENDED (1U << 2)
+#define NPK_INPUT_MOD_CTRL (1U << 3)
+#define NPK_INPUT_MOD_ALT (1U << 4)
+#define NPK_INPUT_MOD_GUI (1U << 5)
+#define NPK_INPUT_MOD_ALTGR (1U << 6)
 #define NPK_KEY_ESC 1U
 #define NPK_KEY_ENTER 28U
 #define NPK_KEY_TAB 15U
@@ -30,6 +34,12 @@ typedef struct {
 #define NPK_KEY_RIGHT 106U
 #define NPK_KEY_UP 103U
 #define NPK_KEY_DOWN 108U
+#define NPK_KEY_HOME 102U
+#define NPK_KEY_PAGEUP 104U
+#define NPK_KEY_DELETE 111U
+#define NPK_KEY_END 107U
+#define NPK_KEY_PAGEDOWN 109U
+#define NPK_KEY_INSERT 110U
 #define NPK_KEY_LEFT_SHIFT 42U
 #define NPK_KEY_RIGHT_SHIFT 54U
 #define NPK_KEY_CAPSLOCK 58U
@@ -37,9 +47,11 @@ typedef struct {
 void keyboard_init(void);
 void keyboard_irq(void);
 int keyboard_getchar(void);
+int keyboard_getchar_blocking(void);
 bool keyboard_has_data(void);
 bool keyboard_get_event(npk_input_event_t *event);
 void keyboard_enqueue_input_event(uint16_t type, uint16_t code, int32_t value, uint32_t modifiers);
+void keyboard_usb_hid_event(uint8_t usage, bool pressed, uint8_t hid_modifiers);
 void keyboard_clear_events(void);
 void keyboard_set_turkish_layout(bool enabled);
 

@@ -1,6 +1,6 @@
 # NPKernel kullanıcı alanı ABI v1
 
-**Durum:** prototype kernel sözleşmesi. **Amaç:** dış geliştiricilerin daha sonra C veya Rust ile servis, yardımcı program, compositor ve GUI yazabilmesi. Bu belge bir init sistemi, servis programı, shell, libc, pthread kütüphanesi veya GUI sunmaz.
+**Durum:** prototype kernel sözleşmesi; projede ayrıca bounded `user/bash.c` shell örneği ve ona özel freestanding mini-libc vardır. **Amaç:** dış geliştiricilerin daha sonra C veya Rust ile servis, yardımcı program, compositor ve GUI yazabilmesi. Bu belge tam init sistemi, servis yöneticisi, GNU Bash, genel amaçlı libc, pthread kütüphanesi veya GUI sunmaz.
 
 ## 1. Tasarım sınırı
 

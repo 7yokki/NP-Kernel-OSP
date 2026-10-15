@@ -24,6 +24,7 @@ Bu liste **kernel kapsamını** izler. Userspace programlarının kendi build si
 - [x] GOP framebuffer info/claim/map/release lease’i; arbitrary physical map reddi; PS/2 structured keyboard/mouse input event queue.
 - [x] Bounded initramfs directory hierarchy, canonical absolute path normalization ve child `getdents64` entries.
 - [x] Bounded PCI configuration mechanism #1 enumeration; device activation/driver binding yapılmaz.
+- [x] Temel cihaz yöneticisi, USB yöneticisi ve xHCI sürücüsü
 
 ## Tamamlanan Linux x86_64 ABI kapsamı
 
@@ -45,17 +46,20 @@ Bu liste **kernel kapsamını** izler. Userspace programlarının kendi build si
 - [x] Bounded `poll`/`ppoll`/`epoll`: copyin/copyout, regular/pipe/TTY readiness, timeout ve refcount-safe epoll watch cleanup.
 - [ ] Blocking pipe wait queue’ları, `select`, edge-triggered epoll ve terminal job control.
 - [x] `openat` (AT_FDCWD), `fsync`, `fdatasync` ve `sync`; pathname/cwd kapsamı hâlâ bounded.
-- [ ] `newfstatat`, genel symlink/readlink nesneleri, cwd/relative resolution, mount/permission namespace ve geniş `ioctl` modeli. `/proc/self/exe` readlink ve temel TTY ioctl şu an vardır.
+- [ ] `newfstatat`, genel symlink/readlink nesneleri, mount/permission namespace ve geniş `ioctl` modeli. `chdir`/`getcwd` ile bounded cwd-relative open/stat/readlink/exec yolları ve `/proc/self/exe` readlink vardır.
 - [ ] `gettimeofday`, `times`, `clock_nanosleep` ve daha eksiksiz saat/uyku kesilme semantiği.
 - [x] Dynamic ELF kernel handoff: bounded `PT_INTERP`/`PT_DYNAMIC` validation, interpreter path lookup/map, `AT_PHDR`/`AT_PHNUM`/`AT_PHENT`/`AT_BASE`/`AT_ENTRY` auxv ve rollback. `DT_NEEDED` graphı, sembol çözümleme ve relocation userspace `ld.so` sorumluluğudur.
 - [x] ELF adversarial validator corpus: 38 vakalık host harness; header/overflow/segment/W^X/entry/interpreter traversal/embedded-NUL/dynamic metadata reddi.
 - [x] ATA PIO write yolu ve bounded persistent NPKFS: `/persist`, fixed-region metadata/data, çift metadata slotu, checksum/generation/transaction marker, open flags, close/fsync/fdatasync/sync ve readback altyapısı.
 - [x] Limine MP/AP bring-up ve bounded SMP discovery: QEMU `-smp 2` AP online; AP’ler güvenli idle loop’ta tutulur.
 - [ ] SMP scheduler/per-CPU run queue, IPI/timer routing, DMA/IOMMU, AHCI/NVMe ve network stack.
-- [ ] USB host/HID, hotplug, gerçek device namespace ve input routing; PS/2 mouse yalnızca üç-byte bounded backend’tir.
+- [x] Bounded xHCI USB HID boot-keyboard input: interface/report descriptor doğrulama, Configure Endpoint + SET_CONFIGURATION sırası, boot protocol, interrupt-IN report ring ve press/release input queue; QEMU QMP tuş enjeksiyonu ile doğrulandı.
+- [x] Satır tabanlı blocking TTY `read(0)` ve default ring-3 `/bin/bash.elf`: küçük freestanding libc, stdin/stdout, cwd ve bounded Linux-like built-ins; `exec` mevcut shell sürecini `execve` ile değiştirir. USB QMP uçtan uca QEMU testi geçti.
+- [ ] Shell için fork/exec/wait tabanlı dış komut çalıştırma ve child lifecycle; mevcut `exec` POSIX benzeri replacement semantics kullanır.
+- [ ] Geniş USB desteği: çok arayüz/alternate configuration, rapor-protocol HID, SuperSpeed companion descriptors, hub/hotplug, remove/unbind ve gerçek donanım matrisi.
 - [ ] Unix sockets, eventfd/signalfd, general capability transfer, network ve audio kernel foundations.
 - [ ] Persistent directory tree ve data journaling/crash-consistent filesystem; NPKFS metadata recovery bounded kalır.
 
 > `kmalloc/kfree` kernel içi heap içindir. Userspace `malloc`, process adres alanındaki VMA/page ownership ve libc TLS sözleşmelerini kullanır; kernel yalnızca gerekli ABI ve bellek güvenliğini sağlar.
 
-> **Uyumluluk sınırı:** Kernel artık dynamic ELF için interpreter handoff sağlayabilir; ancak `DT_NEEDED`/sembol çözümleme/relocation userspace `ld.so` tarafından yapılmalıdır. Thread, futex, poll/epoll, shared memory, display/input, persistent storage, PCI/PS2 mouse, SMP ve realtime signal yolları belgelenen bounded subset’tir; tam pthread/Rust runtime, per-CPU SMP scheduler, USB/network/audio stack ve tüm Linux pathname/signal semantiği iddia edilmez.
+> **Uyumluluk sınırı:** Kernel artık dynamic ELF için interpreter handoff sağlayabilir; ancak `DT_NEEDED`/sembol çözümleme/relocation userspace `ld.so` tarafından yapılmalıdır. Thread, futex, poll/epoll, shared memory, display/input, persistent storage, PCI/PS2 mouse, SMP ve realtime signal yolları belgelenen bounded subset’tir; tam pthread/Rust runtime, per-CPU SMP scheduler, USB/network/audio stack ve tüm Linux pathname/signal semantiği GARANTİ edilmez.
