@@ -1,77 +1,77 @@
 # NPKernel
 
-NPKernel (**No Problem Kernel**), gelecekte geliştirilecek **NPOS** işletim sisteminin x86_64 çekirdek tabanıdır. Proje monolitik fakat modüler bir çekirdek düzenini izler; yaklaşık yüzde 20 assembly ve yüzde 60–80 C hedefiyle, donanıma yakın çalışma ile okunabilir C alt sistemleri arasında dengeli bir yapı kurar. Çekirdek Linux x86_64 syscall numaralarını ve register çağrı sözleşmesini kullanır; ancak bu durum tek başına tüm Linux kullanıcı alanı ikili dosyalarıyla uyumluluk anlamına gelmez. NPKernel, tam Linux uyumluluğu iddiasında bulunmadan, güvenli bir userspace temelini ve NPOS’a özgü genişletme noktalarını sağlar. Güncel kaynakta `rt_sigaction` yalnızca kayıt tutmakla sınırlı değildir: temel signal delivery, `kill`/`tgkill`, blocked/pending maskesi ve `rt_sigreturn` uygulanmıştır.
+NPKernel (**No Problem Kernel**) is the x86_64 kernel foundation of **NPOS**, an operating system to be developed in the future. The project follows a monolithic but modular kernel layout; with a target of roughly 20 percent assembly and 60–80 percent C, it strikes a balance between hardware-near code and readable C subsystems. The kernel uses the Linux x86_64 syscall numbers and register calling convention; however, this alone does not imply compatibility with all Linux userspace binaries. NPKernel provides a secure userspace foundation and NPOS-specific extension points without claiming full Linux compatibility. In the current source, `rt_sigaction` is not limited to merely recording registrations: basic signal delivery, `kill`/`tgkill`, blocked/pending masks and `rt_sigreturn` are implemented.
 
-> **Tasarım sınırı:** NPKernel pencere yöneticisi, masaüstü, sprite, mouse imleci veya başka bir GUI katmanı çizmez. Kernel yalnızca güvenli bir framebuffer handoff/lease ve yapılandırılmış input temeli sağlar; compositor ve GUI userspace sorumluluğudur.
+> **Design boundary:** NPKernel does not draw a window manager, desktop, sprites, a mouse cursor or any other GUI layer. The kernel only provides a secure framebuffer handoff/lease and a structured input foundation; the compositor and GUI are the responsibility of userspace.
 
-> Not: Temel olarak README.md yanlış olabilir çünkü geç güncellenme ihtimali vardır
+> Note: README.md may fundamentally be inaccurate because it may be updated late
 
-## Özellik durumu
+## Feature status
 
-| Alt sistem | Durum | Güncel kapsam |
+| Subsystem | Status | Current scope |
 |---|---:|---|
-| Boot | Çalışıyor | Limine ile BIOS CD ve UEFI CD boot; higher-half ELF yükleme |
-| GOP/TTY | Çalışıyor | 1024×768×32 hedefi, siyah userspace terminal yüzeyi, kalın 10×16 bitmap font ve 2× hücre ölçeği; kernel TTY canonical read, shell için raw/poll karakter girdisi ve yanıp sönen alt çizgi imleci |
-| VGA ve log | Çalışıyor | VGA text fallback, GOP console, COM1 seri log, panic handler |
-| GDT/IDT/TSS | Çalışıyor | Ring 0/Ring 3 descriptor’ları, TSS/RSP0, IST, 256 IDT gate’i |
-| Kesme ve timer | Çalışıyor | PIC remap, IRQ1 keyboard, IRQ12 PS/2 mouse, IRQ0 PIT 100 Hz, tam GPR preemption frame’i |
-| PMM/VMM | Çalışıyor | Refcount’lu 4 KiB PMM, root-aware 4-level paging, user-range ve copyin/copyout |
-| Kernel heap | Çalışıyor | `kmalloc`, `kcalloc`, `kfree`; geçersiz ve double-free kontrolleri |
-| ELF64 | Çalışıyor | ET_EXEC/ET_DYN, bounds/overlap doğrulama, W^X, NX, rollback; bounded `PT_INTERP`/`PT_DYNAMIC` interpreter handoff ve auxv |
-| Process/scheduler | Çalışıyor | PID/TID/TGID, kernel stack, gerçek context switch, timer tabanlı BSP preemption; bounded `clone` thread-group subset’i ve `exit_group` |
-| VMA/mmap | Çalışıyor | Anonymous/file-backed `mmap`, immutable initramfs lazy faults, bounded shared-memory/device mapping, `munmap`, `mprotect`, `brk`, stack growth ve W^X |
-| Fork/COW | Çalışıyor | `fork`, low-half address-space clone, copy-on-write page resolution |
-| Exit/wait | Çalışıyor | Zombie süreç, parent wakeup, `wait4`/waitpid yolu, address-space/VMA/FD/stack cleanup |
-| VFS/initramfs | Çalışıyor | CPIO `newc`, bounded directory hierarchy ve canonical absolute paths, refcount’lu open handles, paylaşımlı offset, pipe ring buffer, metadata/directory syscalls, bounded `poll`/`ppoll`/level-triggered `epoll` |
-| Persistent NPKFS | Bounded | ATA PIO fixed-region `/persist`; create/read/write/truncate/append, close, `fsync`/`fdatasync`/`sync` ve readback metadata |
-| `/proc` | Temel | Process, thread ve memory bilgisi için pseudo-filesystem yolları |
-| ATA | Temel | Primary ATA PIO probe/read/write yolu; Q35’te cihaz yokluğu kontrollü ele alınır |
-| SMP | Bring-up | Limine MP response, bounded CPU discovery ve QEMU `-smp 2` AP online; AP scheduler migration’ı henüz etkin değil |
-| Keyboard/input | Çalışıyor | Geriye dönük PS/2 set-1 Türkçe Q ve USB HID boot keyboard; shifted number-row/punctuation, right-AltGr Euro, ortak TTY text queue ve structured key events; IRQ12 PS/2 mouse REL/button events |
-| Userland shell | Bounded | Varsayılan `/bin/bash.elf` ring 3’te; minimal freestanding libc, raw stdin/stdout line editor, yaklaşık 2 saniyelik blink-cycle alt tire imleci ve bounded Linux-benzeri built-in komutlar; `exec` ile ELF’i mevcut shell sürecinde başlatma |
-| PCI | Temel | PCI config mechanism #1 ile bounded bus/device/function enumeration; vendor/class/header/BAR metadata | 
-| ACPI güç | Çalışıyor | RSDT/XSDT, FADT/DSDT `_S5_`, MADT/IOAPIC SCI, PM1 soft-off |
-| Linux ABI | Kademeli | Desteklenmeyen syscall’lar `-ENOSYS`; desteklenen yollar aşağıdaki tabloda listelenir |
+| Boot | Working | BIOS CD and UEFI CD boot via Limine; higher-half ELF loading |
+| GOP/TTY | Working | 1024×768×32 target, black userspace terminal surface, bold 10×16 bitmap font and 2× cell scale; kernel TTY canonical read, raw/poll character input for the shell, and a blinking underscore cursor |
+| VGA and log | Working | VGA text fallback, GOP console, COM1 serial log, panic handler |
+| GDT/IDT/TSS | Working | Ring 0/Ring 3 descriptors, TSS/RSP0, IST, 256 IDT gates |
+| Interrupts and timer | Working | PIC remap, IRQ1 keyboard, IRQ12 PS/2 mouse, IRQ0 PIT 100 Hz, full-GPR preemption frame |
+| PMM/VMM | Working | Refcounted 4 KiB PMM, root-aware 4-level paging, user-range checks and copyin/copyout |
+| Kernel heap | Working | `kmalloc`, `kcalloc`, `kfree`; invalid-free and double-free checks |
+| ELF64 | Working | ET_EXEC/ET_DYN, bounds/overlap validation, W^X, NX, rollback; bounded `PT_INTERP`/`PT_DYNAMIC` interpreter handoff and auxv |
+| Process/scheduler | Working | PID/TID/TGID, kernel stack, real context switch, timer-based BSP preemption; bounded `clone` thread-group subset and `exit_group` |
+| VMA/mmap | Working | Anonymous/file-backed `mmap`, immutable initramfs lazy faults, bounded shared-memory/device mapping, `munmap`, `mprotect`, `brk`, stack growth and W^X |
+| Fork/COW | Working | `fork`, low-half address-space clone, copy-on-write page resolution |
+| Exit/wait | Working | Zombie processes, parent wakeup, `wait4`/waitpid path, address-space/VMA/FD/stack cleanup |
+| VFS/initramfs | Working | CPIO `newc`, bounded directory hierarchy and canonical absolute paths, refcounted open handles, shared offsets, pipe ring buffer, metadata/directory syscalls, bounded `poll`/`ppoll`/level-triggered `epoll` |
+| Persistent NPKFS | Bounded | ATA PIO fixed-region `/persist`; create/read/write/truncate/append, close, `fsync`/`fdatasync`/`sync` and readback metadata |
+| `/proc` | Basic | Pseudo-filesystem paths for process, thread and memory information |
+| ATA | Basic | Primary ATA PIO probe/read/write path; absence of a device on Q35 is handled in a controlled manner |
+| SMP | Bring-up | Limine MP response, bounded CPU discovery and AP online with QEMU `-smp 2`; AP scheduler migration is not yet enabled |
+| Keyboard/input | Working | Backward-compatible PS/2 set-1 Turkish Q and USB HID boot keyboard; shifted number-row/punctuation, right-AltGr Euro, shared TTY text queue and structured key events; IRQ12 PS/2 mouse REL/button events |
+| Userland shell | Bounded | Default `/bin/bash.elf` in ring 3; minimal freestanding libc, raw stdin/stdout line editor, underscore cursor with a roughly 2-second blink cycle and bounded Linux-like built-in commands; launching an ELF in the current shell process via `exec` |
+| PCI | Basic | Bounded bus/device/function enumeration via PCI config mechanism #1; vendor/class/header/BAR metadata | 
+| ACPI power | Working | RSDT/XSDT, FADT/DSDT `_S5_`, MADT/IOAPIC SCI, PM1 soft-off |
+| Linux ABI | Incremental | Unsupported syscalls return `-ENOSYS`; supported paths are listed in the table below |
 
 ## Ring-3 shell
 
-Normal boot, Limine’in yaklaşık **1024×768 GOP** framebuffer’ını siyah terminal yüzeyi olarak hazırlar ve `/bin/bash.elf` dosyasını ring 3’te başlatır. Shell `stdio.h`, `unistd.h`, `string.h` gibi proje içi freestanding başlıkları ve `user/libc` içindeki küçük runtime’ı kullanır; FD 0’da raw/poll karakter girdisini kendi satır düzenleyicisiyle işler, FD 1/2 stdout/stderr’dir. Prompt sonundaki `_` imleci yaklaşık saniyede bir görünür/gizlenir (tam blink döngüsü yaklaşık iki saniye); backspace ve Türkçe UTF-8 karakter echo’su desteklenir.
+On a normal boot, the kernel prepares Limine's roughly **1024×768 GOP** framebuffer as a black terminal surface and starts `/bin/bash.elf` in ring 3. The shell uses in-project freestanding headers such as `stdio.h`, `unistd.h` and `string.h`, along with the small runtime in `user/libc`; it processes raw/poll character input on FD 0 with its own line editor, and FD 1/2 are stdout/stderr. The `_` cursor at the end of the prompt toggles between visible and hidden roughly once per second (a full blink cycle takes roughly two seconds); backspace and Turkish UTF-8 character echo are supported.
 
-Desteklenen yerleşik komutlar: `help`, `echo`, `clear`, `pwd`, `cd`, `ls`, `cat`, `uname`, `free`, `ps`, `whoami`, `true`, `false` ve `exit`. Türkçe Q’da Shift+1–0 sayı/sembol katmanı, `*`, `?`, `+`, `/`, `=`, `_` ve temel AltGr+E `€` çıktısı hem USB HID hem PS/2 metin yollarında eşlenir. `exec <program>` başarılı olduğunda `/bin/<program>.elf` (veya verilen yol) ile mevcut shell sürecini değiştirir; **fork edip child bekleyen genel bir shell command runner değildir**. Komut satırı sınırlı quoting/backslash tokenization sağlar; GNU Bash uyumluluğu, değişken/parametre genişletmesi, pipeline, redirection, globbing, job control ve tam Linux kullanıcı alanı uyumluluğu kapsam dışıdır. QEMU testi USB HID’den sembol komutu gönderir ve idle ekran görüntülerinde cursor blink’ini denetler; kanıtlar [`docs/qemu-bash-shell-smoke.png`](docs/qemu-bash-shell-smoke.png), [`docs/qemu-bash-turkish-q-symbols.png`](docs/qemu-bash-turkish-q-symbols.png) ve [`docs/qemu-bash-shell-smoke.log`](docs/qemu-bash-shell-smoke.log) dosyalarındadır.
+Supported built-in commands: `help`, `echo`, `clear`, `pwd`, `cd`, `ls`, `cat`, `uname`, `free`, `ps`, `whoami`, `true`, `false` and `exit`. On Turkish Q, the Shift+1–0 number/symbol layer, `*`, `?`, `+`, `/`, `=`, `_` and basic AltGr+E `€` output are mapped in both the USB HID and PS/2 text paths. When `exec <program>` succeeds, it replaces the current shell process with `/bin/<program>.elf` (or the given path); **it is not a general shell command runner that forks and waits for a child**. The command line provides limited quoting/backslash tokenization; GNU Bash compatibility, variable/parameter expansion, pipelines, redirection, globbing, job control and full Linux userspace compatibility are out of scope. The QEMU test sends a symbol command over USB HID and checks the cursor blink in idle screenshots; the evidence is in [`docs/qemu-bash-shell-smoke.png`](docs/qemu-bash-shell-smoke.png), [`docs/qemu-bash-turkish-q-symbols.png`](docs/qemu-bash-turkish-q-symbols.png) and [`docs/qemu-bash-shell-smoke.log`](docs/qemu-bash-shell-smoke.log).
 
-### Uygulanan syscall yolları
+### Implemented syscall paths
 
-Linux x86_64 ABI’de syscall numarası `RAX`, argümanlar ise sırasıyla `RDI, RSI, RDX, R10, R8, R9` üzerinden alınır. NPKernel’in dispatcher’ı bu düzeni korur ve kullanıcı dönüşünü güvenli bir `IRETQ` frame’i üzerinden yapar. [1] [2]
+In the Linux x86_64 ABI, the syscall number is passed in `RAX`, and the arguments in `RDI, RSI, RDX, R10, R8, R9` respectively. NPKernel's dispatcher preserves this layout and performs the return to user mode through a secure `IRETQ` frame. [1] [2]
 
-Numara, register argümanları, kısa açıklama ve bounded kapsam ayrıntıları için [tam syscall başvuru dokümanına](docs/syscalls.md) bakın.
+For the number, register arguments, a short description and bounded-scope details, see the [full syscall reference document](docs/syscalls.md).
 
-| Syscall ailesi | Uygulanan yollar |
+| Syscall family | Implemented paths |
 |---|---|
-| Dosya ve metadata | `read`, `write`, `open`, `close`, `fstat`, `stat`, `lseek`, `getdents64`, `getcwd`, `chdir`, `readlink`; bounded cwd-relative initramfs paths, refcount’lu logical fd slotları |
-| Process/IPC | `getpid`, `gettid`, `fork`, `execve`, `exit`, `exit_group`, `set_tid_address`, `wait4`; proje waitpid alias’ı; bounded `clone`; NPK shared-memory object ve parent/child descriptor transfer extension’ları |
-| Bellek ve TLS | `mmap`, `munmap`, `mprotect`, `brk`, `arch_prctl`; lazy allocation, file-backed/private/shared/device mapping, demand fault, COW, W^X ve per-thread FS/GS base |
-| Vectored/runtime I/O | `readv`, `writev`, `pipe`, `dup`, `dup2`, `fcntl`, `sched_yield`, `poll`, `ppoll`, `epoll`, TTY `ioctl`; regular file, pipe ve TTY readiness kapsamı |
-| Sinyal ve fault yolu | `rt_sigaction`, `rt_sigprocmask`, `kill`, `tgkill`, `rt_sigqueueinfo`, `rt_tgsigqueueinfo`, bounded `siginfo_t`/`si_value` queue, user fault delivery, `SA_SIGINFO` frame ve `rt_sigreturn` |
-| Zaman ve sistem | `clock_gettime`, `nanosleep`, `uname`, `/proc` erişim yolları; bounded `futex` (`WAIT`/`WAKE`, timeout, EINTR) ve `openat`/`fsync`/`fdatasync`/`sync` |
-| Display/input/security | Canonical/user-range doğrulaması, W^X, ring ayrımı, ayrı kernel stack, copyin/copyout, single-owner framebuffer lease ve arbitrary physical map reddi |
+| File and metadata | `read`, `write`, `open`, `close`, `fstat`, `stat`, `lseek`, `getdents64`, `getcwd`, `chdir`, `readlink`; bounded cwd-relative initramfs paths, refcounted logical fd slots |
+| Process/IPC | `getpid`, `gettid`, `fork`, `execve`, `exit`, `exit_group`, `set_tid_address`, `wait4`; project waitpid alias; bounded `clone`; NPK shared-memory object and parent/child descriptor transfer extensions |
+| Memory and TLS | `mmap`, `munmap`, `mprotect`, `brk`, `arch_prctl`; lazy allocation, file-backed/private/shared/device mapping, demand fault, COW, W^X and per-thread FS/GS base |
+| Vectored/runtime I/O | `readv`, `writev`, `pipe`, `dup`, `dup2`, `fcntl`, `sched_yield`, `poll`, `ppoll`, `epoll`, TTY `ioctl`; regular file, pipe and TTY readiness coverage |
+| Signal and fault path | `rt_sigaction`, `rt_sigprocmask`, `kill`, `tgkill`, `rt_sigqueueinfo`, `rt_tgsigqueueinfo`, bounded `siginfo_t`/`si_value` queue, user fault delivery, `SA_SIGINFO` frame and `rt_sigreturn` |
+| Time and system | `clock_gettime`, `nanosleep`, `uname`, `/proc` access paths; bounded `futex` (`WAIT`/`WAKE`, timeout, EINTR) and `openat`/`fsync`/`fdatasync`/`sync` |
+| Display/input/security | Canonical/user-range validation, W^X, ring separation, separate kernel stack, copyin/copyout, single-owner framebuffer lease and rejection of arbitrary physical maps |
 
-`mmap` çağrısı `addr, length, prot, flags, fd, offset` sözleşmesini izler. Anonymous mapping önce yalnızca VMA olarak rezerve edilir; fiziksel sayfa ilk erişimde page-fault handler tarafından oluşturulur. `mprotect` VMA metadata’sını bölge sınırlarında böler, mevcut PTE izinlerini ve TLB’yi günceller ve W^X’i korur. `fork` sırasında writable kullanıcı sayfaları parent ve child arasında COW olarak paylaşılır. Bir write fault geldiğinde yalnızca ilgili sayfa kopyalanır.
+The `mmap` call follows the `addr, length, prot, flags, fd, offset` contract. An anonymous mapping is first reserved only as a VMA; the physical page is created by the page-fault handler on first access. `mprotect` splits VMA metadata at region boundaries, updates existing PTE permissions and the TLB, and preserves W^X. During `fork`, writable user pages are shared between parent and child as COW. When a write fault occurs, only the relevant page is copied.
 
-Pipe uçları process-local logical fd slotlarına kurulur; `fork`, `dup`, `dup2` ve `fcntl(F_DUPFD*)` aynı VFS open-handle’ını refcount ile paylaşır. Pipe backend’i bounded, nonblocking ring-buffer semantiğine sahiptir; boş pipe `-EAGAIN`, okuyucusu kalmayan pipe’a yazma `-EPIPE` döndürür. Descriptor flags içinde `FD_CLOEXEC` tutulur. `poll`/`ppoll` ve level-triggered `epoll` regular file, pipe ve TTY readiness’ini bounded tablolarla sunar; blocking wait queue, `select` ve edge-triggered epoll sonraki aşamadır. NPK shared object fiziksel sayfaları `MAP_SHARED` ile process’ler arasında görünür kılar; descriptor transfer queue parent/child ilişkisiyle sınırlıdır. Display lease arbitrary fiziksel adres kabul etmez; kernel-controlled GOP range map edilir ve release/exit’te revoke edilir. Structured input keyboard/mouse eventleri aynı bounded queue’da tutulur. `/persist` üzerindeki NPKFS fixed-region metadata/data alanları ATA PIO ile close veya `fsync` sırasında commit edilir; çift metadata slotu, checksum, generation ve transaction marker ile sınırlı metadata recovery vardır; data checksum, journaling ve gerçek güç-kesintisi crash recovery yoktur.
+Pipe ends are set up on process-local logical fd slots; `fork`, `dup`, `dup2` and `fcntl(F_DUPFD*)` share the same VFS open handle via refcounting. The pipe backend has bounded, nonblocking ring-buffer semantics; an empty pipe returns `-EAGAIN`, and writing to a pipe with no remaining readers returns `-EPIPE`. `FD_CLOEXEC` is kept in the descriptor flags. `poll`/`ppoll` and level-triggered `epoll` expose regular file, pipe and TTY readiness through bounded tables; blocking wait queues, `select` and edge-triggered epoll are a later stage. NPK shared objects make physical pages visible across processes via `MAP_SHARED`; the descriptor transfer queue is limited to the parent/child relationship. The display lease does not accept arbitrary physical addresses; the kernel-controlled GOP range is mapped and revoked on release/exit. Structured input keeps keyboard/mouse events in the same bounded queue. The NPKFS fixed-region metadata/data areas under `/persist` are committed via ATA PIO on close or `fsync`; bounded metadata recovery exists through dual metadata slots, checksum, generation and transaction marker; there is no data checksum, journaling or true power-loss crash recovery.
 
-## Süreç yaşam döngüsü
+## Process lifecycle
 
-Her userspace süreci kendisine ait bir CR3/address-space root, VMA listesi, kernel stack’i ve FD sahipliğiyle çalışır. `exit` süreci zombie durumuna geçirir; parent bekliyorsa uyandırılır. `wait4` çıkış durumunu kullanıcı belleğine kopyaladıktan sonra child’ın VMA listesi, page table’ları, açık FD’leri ve kernel stack’i güvenli sırayla serbest bırakılır. Parent beklemeden önce runnable child varsa scheduler başka bir thread’e geçer; blocked parent’ın syscall frame’i korunur ve wakeup sırasında dönüş değeri bu frame’e yazılır.
+Each userspace process runs with its own CR3/address-space root, VMA list, kernel stack and FD ownership. `exit` moves the process to the zombie state; if the parent is waiting, it is woken up. After `wait4` copies the exit status to user memory, the child's VMA list, page tables, open FDs and kernel stack are released in a safe order. If there is a runnable child before the parent waits, the scheduler switches to another thread; the blocked parent's syscall frame is preserved, and the return value is written to this frame upon wakeup.
 
-Kullanıcı kaynaklı CPU exception’ları çekirdeği doğrudan panic’e sürüklemez. Geçerli lazy allocation, stack growth veya COW koşulları çözümlenir; çözülemeyen kullanıcı fault’u ilgili Linux sinyaline çevrilir, kayıtlı handler varsa user signal frame üzerinden çalıştırılır, yoksa yalnızca ilgili süreç hata koduyla sonlandırılır. Kernel kaynaklı fatal fault’lar ise panic yoluna gider.
+User-originated CPU exceptions do not drive the kernel directly into a panic. Valid lazy allocation, stack growth or COW conditions are resolved; an unresolvable user fault is translated into the relevant Linux signal, executed via a user signal frame if a registered handler exists, otherwise only the relevant process is terminated with an error code. Fatal faults originating from the kernel go to the panic path.
 
-## Audit raporundaki beş düzeltme
+## Five fixes from the audit report
 
-Güncel sürümde audit raporunda belirtilen beş kernel-side sorun giderilmiştir. **Exception isolation** ile ring-3 fault’ları kernel panic yerine process termination veya signal delivery yoluna ayrılır. **Signal delivery** artık `rt_sigaction` kaydını gerçekten handler’a yönlendirir; minimal user stack frame, restorer doğrulaması ve `rt_sigreturn` ile özgün syscall/IRET frame’i geri yüklenir. **execve** başarı yolundaki erişilebilir sahte `-EFAULT` dönüşü `__builtin_unreachable()` ile kaldırılmıştır. **sys_read** dosya/VFS okumalarında 4096-byte parçalarla istenen `count` değerine kadar devam eder; terminalin satır-fragment davranışı korunur. **getcwd** ise Linux x86_64 ABI’ye uygun olarak user buffer adresini değil, kopyalanan yolun byte sayısını döndürür ve küçük buffer için `-ERANGE` verir.
+In the current version, the five kernel-side issues identified in the audit report have been fixed. With **exception isolation**, ring-3 faults are routed to process termination or signal delivery instead of a kernel panic. **Signal delivery** now actually routes the `rt_sigaction` registration to the handler; the original syscall/IRET frame is restored via a minimal user stack frame, restorer validation and `rt_sigreturn`. The reachable bogus `-EFAULT` return on the **execve** success path has been removed with `__builtin_unreachable()`. **sys_read** continues in 4096-byte chunks on file/VFS reads up to the requested `count`; the terminal's line-fragment behavior is preserved. **getcwd**, in line with the Linux x86_64 ABI, returns the byte count of the copied path rather than the user buffer address, and returns `-ERANGE` for a small buffer.
 
-Bu düzeltmeler; `UD2` sonrası kernel’in çalışmaya devam ettiği fault-isolation testi, SIGILL handler’ın çağrılıp `exit(0)` ile tamamlandığı signal testi, temiz Clang derlemesi ve üretim ayarlı BIOS QEMU boot testiyle doğrulanmıştır. Ayrıntılı kayıt [`docs/verification.md`](docs/verification.md) dosyasındadır. ABI çerçevesi x86_64 giriş kuralları ve ELF/System V sözleşmeleriyle birlikte değerlendirilmiştir [1] [2].
+These fixes were verified by a fault-isolation test in which the kernel keeps running after `UD2`, a signal test in which the SIGILL handler is invoked and completes with `exit(0)`, a clean Clang build and a production-configured BIOS QEMU boot test. The detailed record is in [`docs/verification.md`](docs/verification.md). The ABI framework was evaluated together with the x86_64 entry rules and the ELF/System V contracts [1] [2].
 
-## Dizin yapısı
+## Directory structure
 
 ```text
 npkernel/
@@ -101,13 +101,13 @@ npkernel/
 ├── docs/               # Design and verification records
 └── build/              # Generated ELF, ISO, symbols and test captures
 ```
-## Tarihçe
+## History
 
-Proje GitHub'a sadece 2 ay önce civarında (Temmuz veya Ağustos 2026) yüklenmiştir (v0.4 sürümü olarak) fakat aslında v0.1 Erken dönem versiyonu da vardır ve proje 2025 civarlarında yazılmaya başlanmıştır. Mevcut sürümü olan v0.8 ise tam release'den önce küçük bugfixler üzerine güncellenmeye devam edilen ara sürümdür. 
+The project was uploaded to GitHub only about 2 months ago (July or August 2026) as version v0.4, but an early v0.1 version actually exists as well, and the project began to be written around 2025. The current version, v0.8, is an intermediate version that continues to be updated with small bugfixes ahead of the full release.
 
-## Derleme ve çalıştırma
+## Build and run
 
-Ubuntu/Debian üzerinde `gcc`, `clang`, `lld`, `nasm`, `qemu-system-x86`, `xorriso`, `mtools`, `git`, `make` ve `binutils` paketleri gereklidir. Limine v9.x-binary build sırasında `build/limine` altına alınır. Initramfs üreticisi proje kökünü script konumundan bulur ve Makefile hedef çıktısını açıkça geçirir; bu nedenle arşiv başka bir dizine çıkarıldığında da build yolu `/home/ubuntu/npkernel` gibi sabit bir konuma bağlı değildir.
+On Ubuntu/Debian, the `gcc`, `clang`, `lld`, `nasm`, `qemu-system-x86`, `xorriso`, `mtools`, `git`, `make` and `binutils` packages are required. The Limine v9.x binary is placed under `build/limine` during the build. The initramfs generator locates the project root from the script location and passes the Makefile target output explicitly; therefore, the build path is not tied to a fixed location such as `/home/ubuntu/npkernel` when the archive is extracted to another directory.
 
 ```bash
 cd npkernel
@@ -119,41 +119,41 @@ make run-uefi
 make debug
 ```
 
-`make run` SeaBIOS/legacy-PC yolunu, `make run-uefi` ise OVMF UEFI yolunu kullanır. OVMF yolu dağıtıma göre değişebilir; Makefile varsayılan olarak `/usr/share/OVMF/OVMF_CODE_4M.fd` dosyasını arar. QEMU seri çıktısı kernel loglarının en güvenilir doğrulama kanalıdır. Varsayılan build `NPK_ENABLE_USER_SHELL=1` ile `/bin/bash.elf` dosyasını ring 3’te başlatır; yalnızca legacy smoke payload’ı olan `NPK_ENABLE_USER_DEMO=0` kalır. Shell’i kapatmak için `make NPK_ENABLE_USER_SHELL=0` kullanın. Bu shell GNU Bash veya tam Linux userspace uyumluluğu değildir; desteklenen komut/syscall alt kümesi aşağıda ve `user/bash.c` içinde tanımlıdır.
+`make run` uses the SeaBIOS/legacy-PC path, while `make run-uefi` uses the OVMF UEFI path. The OVMF path may vary by distribution; the Makefile looks for `/usr/share/OVMF/OVMF_CODE_4M.fd` by default. The QEMU serial output is the most reliable verification channel for kernel logs. The default build starts `/bin/bash.elf` in ring 3 with `NPK_ENABLE_USER_SHELL=1`; only the legacy smoke payload, `NPK_ENABLE_USER_DEMO=0`, remains. To disable the shell, use `make NPK_ENABLE_USER_SHELL=0`. This shell is not GNU Bash or full Linux userspace compatibility; the supported command/syscall subset is defined below and in `user/bash.c`.
 
-## Mimari ve ABI kararları
+## Architecture and ABI decisions
 
-Kernel C kaynakları `--target=x86_64-unknown-none-elf`, `-ffreestanding`, `-fno-pie`, `-mno-red-zone`, `-fno-stack-protector`, `-mcmodel=kernel` ve SSE/MMX kapalı seçenekleriyle derlenir. Kernel interrupt’ları SysV red zone’ı güvenli biçimde korumadığından red zone kullanılmaz. Assembly NASM Intel syntax kullanır; `_start` long-mode girişinden sonra bootstrap stack kurar.
+The kernel C sources are compiled with the options `--target=x86_64-unknown-none-elf`, `-ffreestanding`, `-fno-pie`, `-mno-red-zone`, `-fno-stack-protector`, `-mcmodel=kernel` and SSE/MMX disabled. Since kernel interrupts do not safely preserve the SysV red zone, the red zone is not used. Assembly uses NASM Intel syntax; `_start` sets up the bootstrap stack after long-mode entry.
 
-GDT’de ring-0 ve ring-3 code/data selector’ları ayrıdır. TSS, kernel stack geçişi ve IST stack’lerini sağlar. `SYSCALL` girişi `SWAPGS` ile kernel stack’e geçer; dönüşte frame, register’lar ve privilege transition `IRETQ` ile geri yüklenir. PIT wrapper’ı tüm 15 GPR’ı saklayarak scheduler’a CPU’nun oluşturduğu frame’i verir; scheduler timer frame’i ile syscall frame’ini birbirine karıştırmaz.
+The GDT keeps separate ring-0 and ring-3 code/data selectors. The TSS provides kernel stack switching and IST stacks. The `SYSCALL` entry switches to the kernel stack with `SWAPGS`; on return, the frame, registers and privilege transition are restored with `IRETQ`. The PIT wrapper saves all 15 GPRs and gives the scheduler the CPU-generated frame; the scheduler does not mix the timer frame with the syscall frame.
 
-VMM yeni kullanıcı address-space’lerinde yalnızca kernel’in upper-half PML4 dallarını miras alır. Kullanıcı low-half mapping’leri özel page-table dallarında oluşturulur; mevcut supervisor intermediate entries sonradan `VM_USER` yapılmaz. Bu düzen page-table izinlerinin kullanıcı tarafından yukarı doğru genişletilmesini önler.
+For new user address spaces, the VMM inherits only the kernel's upper-half PML4 branches. User low-half mappings are created in private page-table branches; existing supervisor intermediate entries are not later made `VM_USER`. This layout prevents user-driven upward widening of page-table permissions.
 
-## Geliştirilme notları
+## Development notes
 
-Bu proje tamamen AI desteği ile geliştirilmiş ve insan elinin sadece planlamasını yaptığı bir işletim sistemi çekirdeğidir. Proje [Manus.AI](https://manus.im) adlı agent tarafından düzenli olarak geliştirilmektedir.
+This project is an operating system kernel developed entirely with AI assistance, in which the human contributes only the planning. The project is regularly developed by an agent called [Manus.AI](https://manus.im).
 
-## Geliştiriciden doğal yazılmış metin
+## Naturally written text from the developer
 
-Bu proje, ben (github.com/7Yokki) tarafından yapay zekanın doğru ve gerçek kullanımıyla ortaya çıkan bir mükemmelliğidir. Eğer ben bizzat onlarca dokümanla uğraşıp 2000'lerdeki gibi C kodu yazsaydım muhtemelen ömrümü alırdı bu noktaya ulaşmak. Fakat burada çoğumuzun bilmediği bir gerçek: Vibe-coder'lar her zaman iyi veya kötü olmak zorunda değil. Benim değerlendirmeme göre hayatımda 10 satır kod yazmamışımdır (yazılım kursları dışında), eğer böyle iddia ediyorsam en adi şerefisizim.
+This project is a perfection that emerged from me (github.com/7Yokki) using AI correctly and genuinely. If I had personally wrestled with dozens of documents and written C code like it was the 2000s, reaching this point would probably have taken my whole lifetime. But here is a truth most of us don't know: vibe-coders don't always have to be good or bad. By my own assessment, I have never written 10 lines of code in my life (outside of programming courses); if I claim otherwise, I'm the lowest kind of scoundrel.
 
-Vibe-coder'lar bana göre iyi ve kötüye göre değişir;
+In my view, vibe-coders can be divided into good and bad ones:
 
-1. Script kiddie'ler
-Doğal olarak en sevmediğimiz isimlerdir, ben de sevmem, çünkü arkada AI kullanıp open source camiasına gelir ve rastgele insanlara sallayıp "ben kernel yazdım 😜" der, hatta bazıları o kadar cesurdur ki oyun hileleri vs. de yazar internetten bulduğu bedava jailbreak promptlarıyla. Ama gel gelelim işin sonunda bunların hiç biri "AI mühendisi", "Prompt engineer", "AI Agent developer" olamaz çünkü AI'ı bilinçli kullanmaktan haberleri bile yoktur.
+1. Script kiddies
+Naturally, these are the ones we dislike most, and I dislike them too, because they use AI behind the scenes, show up in the open-source community, throw things at random people and say "I wrote a kernel 😜"; some are even bold enough to write game cheats and the like using free jailbreak prompts found on the internet. But in the end, none of them can be an "AI engineer", "Prompt engineer" or "AI Agent developer", because they don't even know what it means to use AI consciously.
 
-2. Etik kullananlar
-Bence benim gibi toplumun da sevdiği bir türdür. Bu tür kişiler AI'ı asistan olarak görür bazen kendileri de debug yapar. Nadiren de olsa tüm kodu AI'a yaptıranlar da vardır, fakat bu kesinlikle ayıplanmamalı, aksine geleceğin vizyonudur. Şöyle örnek vereyim: siz eğer bir AI'a gelip küfrederek context harcıyorsanız bu kesinlikle en aptal AI kullanımıdır, hem etik değil hem de söverek yaptığınız için AI açısından motivasyon kaybıdır, ama sadece bu kadar değil bazı kişiler bir de üzerine üstte dediğim gibi kendini yazılımcı tanımlar, AI'a gelip de "bana windows yap" vs. derler. Bu benim açımdan en kötü kullanımdır. Fakat etik kullanıcılar ve özellikle prompt mühendisleri, ellerinde resmi diploma olmasa bile AI'a "windows yap" yerine "Bana Limine x86_64 ile boot olan, ekrana GOP ile Hello World yazan basit bir demo OS yaz" der hatta daha da detaylı yazarlar.
+2. Ethical users
+I think this is a type that, like me, society also likes. These people see AI as an assistant and sometimes debug themselves. Although rarely, there are also those who have AI do all the code, but this should definitely not be looked down upon; on the contrary, it is the vision of the future. Let me give an example: if you swear at an AI and waste context, that is definitely the dumbest way to use AI; it is not ethical, and since you are swearing, it also causes a loss of motivation on the AI's side. But it doesn't stop there: some people, on top of that, as I said above, call themselves developers and come to the AI saying things like "make me Windows". In my view, this is the worst kind of use. However, ethical users, and especially prompt engineers, even without an official diploma, say to the AI not "make Windows" but "Write me a simple demo OS that boots with Limine x86_64 and prints Hello World on screen via GOP", and they even write in more detail than that.
 
-Ve gelecekte şirketlerde "yazılımcılar"ın aksine prompt mühendisleri, AI agent zincirleri kurabilen ve AI'ı doğru yönlendirebilen mühendisler çalışacak muhtemelen çünkü AI artık çok yol katetti. 
+And in the future, in companies, unlike "developers", it is likely that prompt engineers, engineers who can build AI agent chains and steer AI correctly, will be working, because AI has come a very long way.
 
-Ben ise 2. örnekte verdiğim gibi sadece bu projede değil diğer tüm projelerde AI kullanımı yaparak AI'ların doğru kullanımla nasıl iş çıkarttıklarını gösteriyorum. Yani size bunları zaten profil açıklamamda da açıklıyorum, bunu saklamıyorum, söylemekten de utanmıyorum. Ki utanılası bir durum değil. (12 Yaşında bir çocuğun oturup OSDev dokümanları okuyup VMM yazmasını bekliyorsanız muhtemelen beyniniz taş devrinde kaldı). Çoğu projemde de Manus.AI, Claude, OpenCode, OpenClaw gibi ajanlar kullandım. (Not: Projeyi yaparken ki planlamalar tamamen bana aittir, bu terimlerden haberim var 10 yaşımdan beri).
+As for me, as I described in the 2nd example, I use AI not only in this project but in all other projects, showing how AIs get the job done when used correctly. In other words, I already explain all this to you in my profile description too; I'm not hiding it, nor am I ashamed to say it. Which is nothing to be ashamed of anyway. (If you expect a 12-year-old to sit down, read OSDev documents and write a VMM, your brain has probably been left in the stone age.) In most of my projects, I used agents such as Manus.AI, Claude, OpenCode and OpenClaw. (Note: The planning while building the project is entirely mine; I have known these terms since I was 10 years old.)
 
-## Lisans
+## License
 
-NPKernel, [MIT License](LICENSE) altında yayımlanır. 7YokKi tarafından yürütülmekte ve No PRoblem adına paylaşılmaktadır.
+NPKernel is published under the [MIT License](LICENSE). It is run by 7YokKi and shared on behalf of No PRoblem.
 
-## Referanslar
+## References
 
 [1]: https://www.kernel.org/doc/html/latest/arch/x86/entry_64.html "Linux x86_64 entry documentation"
 [2]: https://refspecs.linuxfoundation.org/elf/gabi4+/contents.html "System V ABI ELF specification"
