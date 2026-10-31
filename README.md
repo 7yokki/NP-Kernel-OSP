@@ -129,26 +129,6 @@ The GDT keeps separate ring-0 and ring-3 code/data selectors. The TSS provides k
 
 For new user address spaces, the VMM inherits only the kernel's upper-half PML4 branches. User low-half mappings are created in private page-table branches; existing supervisor intermediate entries are not later made `VM_USER`. This layout prevents user-driven upward widening of page-table permissions.
 
-## Development notes
-
-This project is an operating system kernel developed entirely with AI assistance, in which the human contributes only the planning. The project is regularly developed by an agent called [Manus.AI](https://manus.im).
-
-## Naturally written text from the developer
-
-This project is a perfection that emerged from me (github.com/7Yokki) using AI correctly and genuinely. If I had personally wrestled with dozens of documents and written C code like it was the 2000s, reaching this point would probably have taken my whole lifetime. But here is a truth most of us don't know: vibe-coders don't always have to be good or bad. By my own assessment, I have never written 10 lines of code in my life (outside of programming courses); if I claim otherwise, I'm the lowest kind of scoundrel.
-
-In my view, vibe-coders can be divided into good and bad ones:
-
-1. Script kiddies
-Naturally, these are the ones we dislike most, and I dislike them too, because they use AI behind the scenes, show up in the open-source community, throw things at random people and say "I wrote a kernel 😜"; some are even bold enough to write game cheats and the like using free jailbreak prompts found on the internet. But in the end, none of them can be an "AI engineer", "Prompt engineer" or "AI Agent developer", because they don't even know what it means to use AI consciously.
-
-2. Ethical users
-I think this is a type that, like me, society also likes. These people see AI as an assistant and sometimes debug themselves. Although rarely, there are also those who have AI do all the code, but this should definitely not be looked down upon; on the contrary, it is the vision of the future. Let me give an example: if you swear at an AI and waste context, that is definitely the dumbest way to use AI; it is not ethical, and since you are swearing, it also causes a loss of motivation on the AI's side. But it doesn't stop there: some people, on top of that, as I said above, call themselves developers and come to the AI saying things like "make me Windows". In my view, this is the worst kind of use. However, ethical users, and especially prompt engineers, even without an official diploma, say to the AI not "make Windows" but "Write me a simple demo OS that boots with Limine x86_64 and prints Hello World on screen via GOP", and they even write in more detail than that.
-
-And in the future, in companies, unlike "developers", it is likely that prompt engineers, engineers who can build AI agent chains and steer AI correctly, will be working, because AI has come a very long way.
-
-As for me, as I described in the 2nd example, I use AI not only in this project but in all other projects, showing how AIs get the job done when used correctly. In other words, I already explain all this to you in my profile description too; I'm not hiding it, nor am I ashamed to say it. Which is nothing to be ashamed of anyway. (If you expect a 12-year-old to sit down, read OSDev documents and write a VMM, your brain has probably been left in the stone age.) In most of my projects, I used agents such as Manus.AI, Claude, OpenCode and OpenClaw. (Note: The planning while building the project is entirely mine; I have known these terms since I was 10 years old.)
-
 ## License
 
 NPKernel is published under the [MIT License](LICENSE). It is run by 7YokKi and shared on behalf of No PRoblem.
